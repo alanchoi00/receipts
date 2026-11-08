@@ -139,7 +139,7 @@ node examples/build.mjs --check    # smoke test: verify only, write nothing
 node examples/build.mjs --offline  # skip the cases that need live websites
 ```
 
-Issues and pull requests are welcome. Please run `node examples/build.mjs --check` before opening a PR, and add a case to `examples/cases.json` for any new behavior.
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) to get set up, and [SECURITY.md](SECURITY.md) to report a security problem privately.
 
 ## License
 
