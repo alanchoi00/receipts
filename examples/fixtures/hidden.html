@@ -1,0 +1,11 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Advanced settings</title><link rel="stylesheet" href="_style.css">
+<style>.tab[aria-hidden=true]{display:none}</style></head><body><main>
+<h1>Advanced settings</h1>
+<p>Most users never need these settings.</p>
+<details><summary>Retry tuning</summary>
+<p>Retries use exponential backoff with full jitter, starting at 200 milliseconds.</p>
+</details>
+<div role="tablist"><button>Python</button> <button>Go</button></div>
+<div class="tab" aria-hidden="false"><p>In Python, pass max_retries to the client constructor.</p></div>
+<div class="tab" aria-hidden="true"><p>In Go, set the MaxRetries field on the client config.</p></div>
+</main></body></html>

@@ -1,0 +1,8 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Status</title><link rel="stylesheet" href="_style.css"></head><body><main>
+<h1>Status</h1><div id="app"><p>Loading…</p></div>
+<script>
+fetch('/data.json?delay=1200').then((r) => r.json()).then((d) => {
+  document.getElementById('app').innerHTML = '<p>' + d.text + '</p>';
+});
+</script>
+</main></body></html>

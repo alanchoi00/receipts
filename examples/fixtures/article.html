@@ -1,0 +1,15 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Rate limiting guide</title>
+<link rel="stylesheet" href="_style.css"><link rel="stylesheet" href="_dark.css"></head><body>
+<div class="top">Acme API docs</div>
+<main>
+<h1>Rate limiting guide</h1>
+<h2>Overview</h2>
+<p>Every API key has a request budget that refills continuously. Budgets are tracked per key and per region, so traffic in one region never drains another.</p>
+<p>When a client exceeds its budget, the API rejects further requests until the budget refills.</p>
+<h2>Retry behaviour</h2>
+<p>Rejected requests receive status 429 and a Retry-After header.</p>
+<p>Clients should wait for the number of seconds given in the Retry-After header before retrying. Retrying sooner counts against the budget and extends the wait.</p>
+<p>SDKs implement this automatically, with a cap of 60 seconds per wait.</p>
+<h2>Errors</h2>
+<p>Other 4xx errors are not retried, because repeating the same request cannot succeed.</p>
+</main></body></html>

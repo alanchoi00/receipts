@@ -27,12 +27,12 @@ Draft the doc first, collect every citation, then verify them **all in one batch
 node <skill-dir>/scripts/snap.mjs --batch - <<'EOF'
 [
   {"url": "https://www.rfc-editor.org/rfc/rfc6585.html", "quote": "Responses with the 429 status code MUST NOT be stored by a cache."},
-  {"url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After", "quote": "A non-negative decimal integer", "out": "docs/refs/delay.png"}
+  {"url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After", "quote": "A non-negative decimal integer", "out": "/abs/path/docs/refs/delay.png"}
 ]
 EOF
 ```
 
-One browser for the batch; quotes on the same URL share a page load. Use absolute paths for `out`. Batch output is a JSON array in input order (single mode, `snap.mjs "<url>" --quote "..."`, prints one object). Each entry:
+One browser for the batch; quotes on the same URL share a page load. Use absolute paths for `out`. Input may also be `{"defaults": {...}, "cites": [...]}` to apply screenshot options to every entry. Batch output is a JSON array in input order (single mode, `snap.mjs "<url>" --quote "..."`, prints one object). Each entry:
 
 | Field | Use |
 |---|---|
@@ -41,8 +41,29 @@ One browser for the batch; quotes on the same URL share a page load. Use absolut
 | `fragment_url` | The link to use (has `#:~:text=`, highlights in Chrome/Safari/Firefox). |
 | `excerpt` | Surrounding paragraph, for checking context (negations, caveats, "except when…"). Want to quote more of it? Re-run with that longer passage as `--quote` so link and screenshot match. |
 | `title`, `section`, `retrieved` | The attribution line: `[<title> — <section>](fragment_url) · retrieved <date>`, or `[<title>](fragment_url)` when `section` is absent. Use these fields; don't add section numbers from memory. |
+| `occurrences` / `occurrence` | Present when the quote appears more than once. Check `excerpt` is the one you meant; if not, re-run with `prefix`/`suffix` (the words just before/after it on the page). |
+| `hidden` | Quote is in content the page hides (e.g. an inactive tab): verified, but no screenshot. |
+| `note` | Anything else worth knowing (fuzzy match, expanded collapsed section, frame fallback). Read it. |
 
-Exit 0 = all found, 1 = some not found, 2 = some errored (PDF, 4xx, login wall, timeout). Expect one follow-up batch: put every entry that needs another pass (failed, fuzzy, or a longer passage wanted) into it together.
+Exit 0 = all found, 1 = some not found, 2 = some errored (PDF, 4xx, login wall, bot check, timeout). Expect one follow-up batch: put every entry that needs another pass (failed, fuzzy, wrong occurrence, or a longer passage wanted) into it together.
+
+## Screenshot options
+
+Optional fields on any entry (or in `defaults`). Map the user's wording; with no wording, leave them out.
+
+| User says | Field |
+|---|---|
+| "tight screenshots", "just the quote" | `"frame": "quote"` (default `paragraph`) |
+| "show the whole section" | `"frame": "section"` (height cap rises to 1200 automatically) |
+| "full-screen", "show the page around it" | `"frame": "viewport"` |
+| "a couple of lines around it" | `"context": 2` (whole text lines above and below) |
+| "mobile-sized" | `"width": 390` (default 1100) |
+| "keep them short" | `"max_height": 150` (default 500; crop centers on the quote) |
+| "highlight in yellow", "no highlight" | `"highlight": "#fff3a0"` / `"none"` |
+| "dark mode" | `"theme": "dark"` (only sites with a dark theme; `note` says otherwise) |
+| "smaller images" | `"scale": 1` (default 2) |
+
+These only shape screenshots. Context wanted in the text itself (or with no screenshots) → quote a longer passage taken from `excerpt`, re-run in the follow-up batch. Quotes in table cells automatically frame the row plus the header row. Every option, with its screenshot, is in the repo's `examples/README.md`.
 
 ## Output format
 
@@ -70,7 +91,8 @@ Clients should not cache rate-limit responses.[^429-cache]
 |---|---|
 | `match: fuzzy` | Use `quote_on_page` (the screenshot already highlights it). If it no longer supports your claim, change the claim. |
 | `match: none` | Search the page another way (different passage, different section URL). Still none → drop the claim or mark it `**UNVERIFIED:**` with a plain link. Never keep an unverified quote in a blockquote. |
-| `ok: false` + error (PDF, login, 403) | Plain link + `**UNVERIFIED (could not load: <error>)**`. Do not fabricate the quote from memory or WebFetch. |
+| `ok: false` + error (PDF, login wall, bot check, 403) | Plain link + `**UNVERIFIED (could not load: <error>)**`. Do not fabricate the quote from memory or WebFetch. |
+| `occurrences` > 1 and `excerpt` is the wrong one | Re-run with `"prefix"` or `"suffix"` set to the neighbouring words of the one you meant. |
 
 ## Common Mistakes
 

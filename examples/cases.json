@@ -1,0 +1,346 @@
+{
+  "groups": [
+    { "id": "matching", "title": "Finding the quote" },
+    { "id": "loading", "title": "Loading the page" },
+    { "id": "security", "title": "URL safety" },
+    { "id": "screenshots", "title": "Screenshot controls" }
+  ],
+  "cases": [
+    {
+      "id": "exact", "group": "matching", "live": true,
+      "title": "Exact quote",
+      "why": "The common case. Also shows the crop skipping the floating infobox next to the paragraph.",
+      "cite": { "url": "https://en.wikipedia.org/wiki/Justin_Bieber", "quote": "With estimated sales of over 150 million records", "out": true },
+      "expect": { "ok": true, "match": "exact", "screenshot": true }
+    },
+    {
+      "id": "punctuation-normalized", "group": "matching",
+      "title": "Curly quotes and dashes",
+      "why": "The page uses “curly quotes” and an em dash; the quote uses straight quotes and a hyphen. These count as the same text.",
+      "cite": { "url": "{{base}}/punctuation.html", "quote": "The header is called \"Retry-After\" - not \"Retry\"." },
+      "expect": { "ok": true, "match": "exact" }
+    },
+    {
+      "id": "punctuation-loose", "group": "matching",
+      "title": "Only punctuation differs",
+      "why": "Page says “rate-limited”, quote says “rate limited”. Still word for word, so `loose`, not `fuzzy`.",
+      "cite": { "url": "{{base}}/punctuation.html", "quote": "Requests are rate limited per API key" },
+      "expect": { "ok": true, "match": "loose" }
+    },
+    {
+      "id": "fuzzy", "group": "matching", "live": true,
+      "title": "Paraphrased quote",
+      "why": "The quote is not on the page. The script returns the closest real sentence, which Claude must use instead.",
+      "cite": { "url": "https://en.wikipedia.org/wiki/Justin_Bieber", "quote": "Bieber is one of the best selling music artists ever, with over 150 million records sold" },
+      "expect": { "ok": true, "match": "fuzzy", "note": "closest sentence" }
+    },
+    {
+      "id": "not-found", "group": "matching",
+      "title": "Quote not on the page",
+      "why": "Nothing close enough. Claude marks the claim UNVERIFIED.",
+      "cite": { "url": "{{base}}/article.html", "quote": "Rate limits are disabled for enterprise customers" },
+      "expect": { "ok": false, "match": "none" }
+    },
+    {
+      "id": "crosses-link", "group": "matching", "live": true,
+      "title": "Quote crosses a link and inline code",
+      "why": "The sentence contains a link styled as code. Also shows a sticky site header not covering the crop.",
+      "cite": { "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After", "quote": "In a 429 Too Many Requests response, this indicates how long to wait before making a new request.", "out": true },
+      "expect": { "ok": true, "match": "exact", "screenshot": true }
+    },
+    {
+      "id": "footnote-marker", "group": "matching",
+      "title": "Footnote marker inside the quote",
+      "why": "The page has a [1] marker mid-sentence; the quote doesn't. It still matches, and the link switches to the start,end form so browsers highlight across the marker.",
+      "cite": { "url": "{{base}}/footnotes.html", "quote": "2.5 billion requests per day across 40 regions", "out": true },
+      "expect": { "ok": true, "match": "exact", "fragment": ",", "screenshot": true }
+    },
+    {
+      "id": "line-wraps", "group": "matching", "live": true,
+      "title": "Plain-text page with hard line wraps",
+      "why": "RFCs are preformatted text wrapped at 72 columns. The quote spans wrapped lines, and the crop centers on it inside a very tall block.",
+      "cite": { "url": "https://www.rfc-editor.org/rfc/rfc6585.html", "quote": "The response representations SHOULD include details explaining the condition, and MAY include a Retry-After header indicating how long to wait before making a new request.", "out": true },
+      "expect": { "ok": true, "match": "exact", "screenshot": true }
+    },
+    {
+      "id": "duplicate-first", "group": "matching",
+      "title": "Same text twice, no hint",
+      "why": "The sentence appears in two sections. Without a hint the script takes the first, says so, and pins the link to that occurrence with the words before and after it.",
+      "cite": { "url": "{{base}}/duplicate.html", "quote": "the default timeout is 30 seconds" },
+      "expect": { "ok": true, "match": "exact", "occurrences": 2, "occurrence": 1, "note": "appears 2 times", "fragment": "client%2C-," }
+    },
+    {
+      "id": "duplicate-prefix", "group": "matching",
+      "title": "Same text twice, picked with prefix",
+      "why": "`prefix` selects the second occurrence; the screenshot highlights that one.",
+      "cite": { "url": "{{base}}/duplicate.html", "quote": "the default timeout is 30 seconds", "prefix": "On the server,", "out": true },
+      "expect": { "ok": true, "match": "exact", "occurrence": 2, "note": "Picked occurrence 2", "fragment": "server%2C-,", "screenshot": true }
+    },
+    {
+      "id": "long-quote", "group": "matching",
+      "title": "Very long quote",
+      "why": "Over 160 characters, so the link uses the short start,end form instead of the whole sentence.",
+      "cite": { "url": "{{base}}/long.html", "quote": "Request logs are kept for 30 days in hot storage, where they can be searched from the dashboard, and are then moved to cold storage for a further 335 days, after which they are permanently deleted unless a legal hold has been placed on the account by the compliance team." },
+      "expect": { "ok": true, "match": "exact", "fragment": "Request%20logs%20are%20kept%20for," }
+    },
+    {
+      "id": "special-characters", "group": "matching", "live": true,
+      "title": "Quote contains - and ,",
+      "why": "These characters are syntax in text-fragment links, so they must be encoded (%2D, %2C).",
+      "cite": { "url": "https://www.rfc-editor.org/rfc/rfc9110.html", "quote": "A delay-seconds value is a non-negative decimal integer, representing time in seconds." },
+      "expect": { "ok": true, "match": "exact", "fragment": "delay%2Dseconds" }
+    },
+    {
+      "id": "collapsed-details", "group": "matching",
+      "title": "Quote inside a collapsed section",
+      "why": "The text is inside a closed <details>. The script finds it, expands the section, and screenshots it.",
+      "cite": { "url": "{{base}}/hidden.html", "quote": "Retries use exponential backoff with full jitter", "out": true },
+      "expect": { "ok": true, "match": "exact", "note": "expanded", "screenshot": true }
+    },
+    {
+      "id": "inactive-tab", "group": "matching",
+      "title": "Quote inside an inactive tab",
+      "why": "The text exists but is display:none. It counts as found and is flagged `hidden`; no screenshot is possible.",
+      "cite": { "url": "{{base}}/hidden.html", "quote": "In Go, set the MaxRetries field on the client config.", "out": true },
+      "expect": { "ok": true, "match": "exact", "hidden": true, "note": "hidden content", "screenshot": false }
+    },
+    {
+      "id": "js-rendered", "group": "matching",
+      "title": "Text added by JavaScript after load",
+      "why": "The page fetches its content 1.2 s after loading. The script waits for the network to go quiet and retries.",
+      "cite": { "url": "{{base}}/js-rendered.html", "quote": "All systems are operating normally." },
+      "expect": { "ok": true, "match": "exact" }
+    },
+    {
+      "id": "non-latin", "group": "matching",
+      "title": "Japanese text",
+      "why": "No spaces between words; matching still works.",
+      "cite": { "url": "{{base}}/unicode.html", "quote": "サーバーはステータス 429 を返します", "out": true },
+      "expect": { "ok": true, "match": "exact", "screenshot": true }
+    },
+    {
+      "id": "emoji", "group": "matching",
+      "title": "Emoji in the quote",
+      "why": "Emoji are kept and encoded in the link.",
+      "cite": { "url": "{{base}}/unicode.html", "quote": "Deploys are frozen on Fridays 🚫🚀 unless the release owner approves." },
+      "expect": { "ok": true, "match": "exact" }
+    },
+
+    {
+      "id": "pdf", "group": "loading",
+      "title": "PDF",
+      "why": "Only HTML pages are supported. Claude marks the citation UNVERIFIED.",
+      "cite": { "url": "{{base}}/doc.pdf", "quote": "anything" },
+      "expect": { "ok": false, "error": "Not an HTML page" }
+    },
+    {
+      "id": "http-404", "group": "loading",
+      "title": "Page not found",
+      "why": "HTTP errors are reported as errors, not as a missing quote.",
+      "cite": { "url": "{{base}}/missing.html", "quote": "anything" },
+      "expect": { "ok": false, "error": "HTTP 404" }
+    },
+    {
+      "id": "login-wall", "group": "loading",
+      "title": "Login wall",
+      "why": "The page loads but shows a sign-in form. Reported as a login wall so Claude doesn't claim the source lacks the quote.",
+      "cite": { "url": "{{base}}/login.html", "quote": "Internal roadmap for Q3" },
+      "expect": { "ok": false, "error": "Login wall" }
+    },
+    {
+      "id": "bot-check", "group": "loading",
+      "title": "Bot check",
+      "why": "A Cloudflare-style challenge page. Reported as a bot check, not a missing quote.",
+      "cite": { "url": "{{base}}/challenge.html", "quote": "anything at all here" },
+      "expect": { "ok": false, "error": "Bot check" }
+    },
+    {
+      "id": "redirect", "group": "loading",
+      "title": "Ordinary redirect",
+      "why": "Moved pages are followed.",
+      "cite": { "url": "{{base}}/redirect", "quote": "Every API key has a request budget that refills continuously." },
+      "expect": { "ok": true, "match": "exact" }
+    },
+    {
+      "id": "http-to-https", "group": "loading", "live": true,
+      "title": "http → https redirect",
+      "why": "Most sites redirect plain http.",
+      "cite": { "url": "http://en.wikipedia.org/wiki/Justin_Bieber", "quote": "best-selling music artists of all time" },
+      "expect": { "ok": true, "match": "exact" }
+    },
+    {
+      "id": "unreachable", "group": "loading",
+      "title": "Unreachable host",
+      "why": "Connection refused. Reported as an error; the rest of the batch still finishes.",
+      "cite": { "url": "http://127.0.0.1:9/", "quote": "anything" },
+      "expect": { "ok": false, "error": "ERR_CONNECTION_REFUSED" }
+    },
+    {
+      "id": "bad-option", "group": "loading",
+      "title": "Invalid option",
+      "why": "Bad option values are errors, not silently replaced with defaults.",
+      "cite": { "url": "{{base}}/article.html", "quote": "anything", "frame": "huge" },
+      "expect": { "ok": false, "error": "frame must be one of" }
+    },
+
+    {
+      "id": "file-url", "group": "security",
+      "title": "file:// URL",
+      "why": "Local files must never be quoted, even if a web page tricks Claude into trying.",
+      "cite": { "url": "file:///etc/hosts", "quote": "localhost" },
+      "expect": { "ok": false, "error": "Blocked URL scheme" }
+    },
+    {
+      "id": "metadata-decimal", "group": "security",
+      "title": "Cloud metadata address, written as a number",
+      "why": "2852039166 is 169.254.169.254.",
+      "cite": { "url": "http://2852039166/latest/meta-data/", "quote": "ami-id" },
+      "expect": { "ok": false, "error": "Blocked host" }
+    },
+    {
+      "id": "metadata-ipv6", "group": "security",
+      "title": "Cloud metadata address inside IPv6",
+      "why": "The NAT64 form of 169.254.169.254.",
+      "cite": { "url": "http://[64:ff9b::a9fe:a9fe]/", "quote": "ami-id" },
+      "expect": { "ok": false, "error": "Blocked host" }
+    },
+    {
+      "id": "metadata-redirect", "group": "security",
+      "title": "Redirect to the metadata address",
+      "why": "Each redirect is checked before the browser follows it.",
+      "cite": { "url": "{{base}}/redirect-metadata", "quote": "ami-id" },
+      "expect": { "ok": false, "error": "ERR_BLOCKED_BY_CLIENT" }
+    },
+    {
+      "id": "localhost", "group": "security",
+      "title": "localhost is allowed",
+      "why": "On purpose: internal docs on your network are a core use case. (Every fixture page here is served from localhost.)",
+      "cite": { "url": "{{base}}/article.html", "quote": "When a client exceeds its budget" },
+      "expect": { "ok": true, "match": "exact" }
+    },
+
+    {
+      "id": "frame-paragraph", "group": "screenshots",
+      "title": "Default: the paragraph",
+      "prompt": "(no wording needed)",
+      "why": "The default frame is the paragraph containing the quote.",
+      "cite": { "url": "{{base}}/article.html", "quote": "Clients should wait for the number of seconds given in the Retry-After header before retrying.", "out": true },
+      "expect": { "ok": true, "screenshot": true }
+    },
+    {
+      "id": "frame-quote", "group": "screenshots",
+      "title": "frame: quote",
+      "prompt": "\"tight screenshots\"",
+      "why": "Only the lines the quote is on.",
+      "cite": { "url": "{{base}}/article.html", "quote": "Clients should wait for the number of seconds given in the Retry-After header before retrying.", "out": true, "frame": "quote" },
+      "expect": { "ok": true, "screenshot": true }
+    },
+    {
+      "id": "frame-section", "group": "screenshots",
+      "title": "frame: section",
+      "prompt": "\"show the whole section\"",
+      "why": "From the nearest heading above the quote to the next heading.",
+      "cite": { "url": "{{base}}/article.html", "quote": "Clients should wait for the number of seconds given in the Retry-After header before retrying.", "out": true, "frame": "section" },
+      "expect": { "ok": true, "screenshot": true }
+    },
+    {
+      "id": "frame-viewport", "group": "screenshots",
+      "title": "frame: viewport",
+      "prompt": "\"full-screen screenshots\"",
+      "why": "The whole browser window, centered on the quote.",
+      "cite": { "url": "{{base}}/article.html", "quote": "Clients should wait for the number of seconds given in the Retry-After header before retrying.", "out": true, "frame": "viewport", "max_height": 600 },
+      "expect": { "ok": true, "screenshot": true }
+    },
+    {
+      "id": "context-lines", "group": "screenshots",
+      "title": "context: 2",
+      "prompt": "\"include a couple of lines around it\"",
+      "why": "Extra lines above and below the frame.",
+      "cite": { "url": "{{base}}/article.html", "quote": "Clients should wait for the number of seconds given in the Retry-After header before retrying.", "out": true, "frame": "quote", "context": 2 },
+      "expect": { "ok": true, "screenshot": true }
+    },
+    {
+      "id": "phone-width", "group": "screenshots",
+      "title": "width: 390",
+      "prompt": "\"mobile-sized screenshots\"",
+      "why": "Phone-width browser; the quote wraps onto more lines.",
+      "cite": { "url": "{{base}}/article.html", "quote": "Clients should wait for the number of seconds given in the Retry-After header before retrying.", "out": true, "width": 390 },
+      "expect": { "ok": true, "screenshot": true }
+    },
+    {
+      "id": "max-height", "group": "screenshots",
+      "title": "max_height: 120",
+      "prompt": "\"keep them short\"",
+      "why": "A section frame capped at 120 px, centered on the quote.",
+      "cite": { "url": "{{base}}/article.html", "quote": "Clients should wait for the number of seconds given in the Retry-After header before retrying.", "out": true, "frame": "section", "max_height": 120 },
+      "expect": { "ok": true, "screenshot": true }
+    },
+    {
+      "id": "highlight-color", "group": "screenshots",
+      "title": "highlight: yellow",
+      "prompt": "\"highlight in yellow\"",
+      "why": "Any CSS color works.",
+      "cite": { "url": "{{base}}/article.html", "quote": "Clients should wait for the number of seconds given in the Retry-After header before retrying.", "out": true, "highlight": "#fff3a0" },
+      "expect": { "ok": true, "screenshot": true }
+    },
+    {
+      "id": "highlight-none", "group": "screenshots",
+      "title": "highlight: none",
+      "prompt": "\"no highlight\"",
+      "why": "Plain screenshot of the frame.",
+      "cite": { "url": "{{base}}/article.html", "quote": "Clients should wait for the number of seconds given in the Retry-After header before retrying.", "out": true, "highlight": "none" },
+      "expect": { "ok": true, "screenshot": true }
+    },
+    {
+      "id": "theme-dark", "group": "screenshots",
+      "title": "theme: dark",
+      "prompt": "\"dark mode screenshots\"",
+      "why": "Uses the site's own dark theme; highlighted text switches to dark ink so it stays readable.",
+      "cite": { "url": "{{base}}/article.html", "quote": "Clients should wait for the number of seconds given in the Retry-After header before retrying.", "out": true, "theme": "dark" },
+      "expect": { "ok": true, "screenshot": true }
+    },
+    {
+      "id": "scale-1", "group": "screenshots",
+      "title": "scale: 1",
+      "prompt": "\"smaller images\"",
+      "why": "Standard resolution: about a quarter of the pixels of the default 2×.",
+      "cite": { "url": "{{base}}/article.html", "quote": "Clients should wait for the number of seconds given in the Retry-After header before retrying.", "out": true, "scale": 1 },
+      "expect": { "ok": true, "screenshot": true }
+    },
+    {
+      "id": "section-no-heading", "group": "screenshots",
+      "title": "frame: section on a page without headings",
+      "why": "Falls back to the paragraph and says so.",
+      "cite": { "url": "{{base}}/no-headings.html", "quote": "The rate limiter now refills budgets every second", "out": true, "frame": "section" },
+      "expect": { "ok": true, "note": "No heading above the quote", "screenshot": true }
+    },
+    {
+      "id": "viewport-short-page", "group": "screenshots",
+      "title": "frame: viewport on a very short page",
+      "why": "The page is shorter than the window; the capture stops at the page's end.",
+      "cite": { "url": "{{base}}/short.html", "quote": "The legacy v1 endpoints will be removed", "out": true, "frame": "viewport", "max_height": 300 },
+      "expect": { "ok": true, "screenshot": true }
+    },
+    {
+      "id": "dark-unsupported", "group": "screenshots",
+      "title": "theme: dark on a site without dark mode",
+      "why": "Pages can't be forced dark; the screenshot stays light and the result says so.",
+      "cite": { "url": "{{base}}/short.html", "quote": "The legacy v1 endpoints will be removed", "out": true, "theme": "dark" },
+      "expect": { "ok": true, "note": "no dark mode", "screenshot": true }
+    },
+    {
+      "id": "wide-table", "group": "screenshots",
+      "title": "Quote in a wide table",
+      "why": "Frames the whole row so the value keeps its context. The table is wider than the window, so the crop centers horizontally on the quote.",
+      "cite": { "url": "{{base}}/table.html", "quote": "Burst limit: 200 requests per second", "out": true },
+      "expect": { "ok": true, "match": "exact", "screenshot": true }
+    },
+    {
+      "id": "tall-block-shift", "group": "screenshots", "live": true,
+      "title": "Page that keeps shifting while loading",
+      "why": "RFC 9110 reflows as fonts and styles arrive. The script waits until the quote stops moving before capturing.",
+      "cite": { "url": "https://www.rfc-editor.org/rfc/rfc9110.html", "quote": "Retry-After = HTTP-date / delay-seconds", "out": true },
+      "expect": { "ok": true, "match": "exact", "screenshot": true }
+    }
+  ]
+}
