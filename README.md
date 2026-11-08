@@ -82,7 +82,7 @@ The first time Claude uses the plugin, it installs a headless browser (Playwrigh
 
 ## Screenshot options
 
-Screenshots are off unless you ask, because they roughly double the time. When you ask, describe what you want in plain words:
+Screenshots are off unless you ask (in chat, Claude offers them at the end of its answer). They only add about half a second per page; they're off so your project doesn't fill up with images. When you ask, describe what you want in plain words:
 
 | Say | You get |
 |---|---|
@@ -98,7 +98,7 @@ Screenshots are off unless you ask, because they roughly double the time. When y
 
 You can see every option, with a real screenshot, in [`examples/README.md`](examples/README.md).
 
-In a doc, screenshots are saved to a `refs/` folder next to it. In chat, they go to a temporary folder and Claude gives you the file paths.
+In a doc, screenshots are saved to a `refs/` folder next to it. In chat, they go to a temporary folder; Claude shows them to you if your app can display images (like the Claude desktop app), or gives you the file paths.
 
 ## Make it the default
 

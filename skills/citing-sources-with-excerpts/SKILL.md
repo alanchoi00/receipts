@@ -9,7 +9,12 @@ description: Use when citing web pages as evidence, either in a markdown file (s
 
 Every cited claim carries its proof inline: the verbatim passage, a link that jumps to and highlights that passage, and optionally a screenshot. Readers verify without clicking; clicking lands exactly on the text. Works for markdown files and for answers in chat.
 
-**Every quote must come from `snap.mjs` output, never from memory or a summarizing fetch tool.** WebFetch-style tools paraphrase pages; only the script checks the rendered text verbatim.
+**Every quote must come from `snap.mjs` output, never from memory, a search result's summary, or a summarizing fetch tool.** Search summaries and WebFetch-style tools paraphrase pages; only the script checks the rendered text verbatim.
+
+**Check claims, not just quotes.** A matching quote proves the page says *that*. It proves nothing about what the page doesn't say. Two kinds of claim always go through the script as their own batch entries, including when you are only "verifying a draft":
+
+- **Absence:** before writing that a page doesn't say, mention, or require something, add the sentence that would be there if it did (e.g. `Responses with the 429 status code MUST NOT be stored by a cache.`). Only `match: none` supports the absence, and then write "not found on <page>", never "the spec says nothing about X".
+- **Disagreement:** when memory, a search summary, a draft you already wrote, or this skill's examples disagree about what a page says, add the disputed sentence. The script's result settles it, whichever side it favours. (Every quote in this skill's examples was verified with the script.)
 
 ## Setup (once per machine)
 
@@ -95,11 +100,12 @@ Clients should not cache rate-limit responses:
 ```
 
 - No `retrieved` date (the answer is the retrieval).
-- Chat can't show images. If the user asks for screenshots, save them under the system temp directory (e.g. `$TMPDIR/receipts/<slug>.png`), never into the user's project, and give each one's full absolute path on its own line after the quote.
+- Save chat screenshots under the system temp directory (e.g. `$TMPDIR/receipts/<slug>.png`), never into the user's project. If your host has a tool for showing the user a file or image, show each screenshot with it; otherwise give each one's full absolute path on its own line after the quote.
+- No screenshots requested → end the answer with a one-line offer, e.g. "Want screenshots of these passages?"
 
 **Both:**
 - Your own reasoning or recommendation gets no quote; say it is your (or the team's) reasoning, not the source's. A factual claim about the outside world (how libraries, browsers, or standards behave) needs a citation or must be phrased as an expectation.
-- Screenshots are **opt-in** (they roughly double run time). Add `"out"` only when the user asks for screenshots, or, in a markdown file, the evidence is visual (a table, figure, code layout) where the text alone loses meaning. Include an image or path only for entries with `screenshot` in the result.
+- Screenshots are **opt-in**: they're cheap (about half a second per page) but add image files the user has to keep or delete. Add `"out"` only when the user asks for screenshots, or, in a markdown file, the evidence is visual (a table, figure, code layout) where the text alone loses meaning. Include an image or path only for entries with `screenshot` in the result.
 - Quote the shortest passage that fully supports the claim (one sentence is typical).
 
 ## When the script fails
@@ -117,3 +123,5 @@ Clients should not cache rate-limit responses:
 - Using a section anchor (`#section-4`) instead of `fragment_url` → reader still has to hunt.
 - Citing a passage whose `excerpt` contradicts the claim (e.g. the next sentence says "this does not apply to…").
 - Running WebFetch to "verify" → it summarizes; it cannot confirm verbatim text. Use the script.
+- Trusting a search tool's answer summary about what a page says or omits → it paraphrases like WebFetch, and often misplaces which section says what. Put the disputed sentence through the script.
+- "Verifying" a draft by checking only the quotes already in it → its absence claims and disputed claims go untested, so a false answer looks fully verified.
