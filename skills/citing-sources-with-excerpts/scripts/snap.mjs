@@ -219,6 +219,19 @@ function locateInPage({ start, end }) {
 const CONCURRENCY = 4;
 const SLOW_TYPES = new Set(['image', 'font', 'media']);
 
+// Only web pages may be cited: no file://, chrome://, etc. (a prompt-injected "citation" must not
+// read local files). Cloud metadata endpoints are blocked too. localhost/private networks stay
+// allowed on purpose: internal docs on a VPN are a core use case.
+const BLOCKED_HOSTS = /^(169\.254\.\d+\.\d+|\[fe80:[0-9a-f:]*\]|metadata\.google\.internal|metadata)$/i;
+function urlProblem(raw, { subresource = false } = {}) {
+  let u;
+  try { u = new URL(raw); } catch { return 'Invalid URL'; }
+  const okSchemes = subresource ? ['http:', 'https:', 'data:', 'blob:'] : ['http:', 'https:'];
+  if (!okSchemes.includes(u.protocol)) return `Blocked URL scheme ${u.protocol} (only http/https pages can be cited)`;
+  if (BLOCKED_HOSTS.test(u.hostname)) return `Blocked host ${u.hostname} (cloud metadata / link-local)`;
+  return null;
+}
+
 function cropFor({ rangeRect: q, blockRect: b }) {
   const padX = 16, padY = 8;
   // Crop to the containing block's text; if the block is very tall, crop around the quote instead.
@@ -234,6 +247,21 @@ function measureStored() {
   return { rangeRect: doc(range.getBoundingClientRect()), blockRect: doc(textRange.getBoundingClientRect()) };
 }
 
+// Headless Chromium can stall a screenshot of a background page while other pages are busy
+// (seen intermittently in parallel batches). Capture one page at a time, in front, with a retry.
+let captureLock = Promise.resolve();
+function captureExclusive(page, opts) {
+  const run = captureLock.then(async () => {
+    for (let attempt = 1; ; attempt++) {
+      await page.bringToFront();
+      try { return await page.screenshot({ ...opts, timeout: 10000 }); }
+      catch (e) { if (attempt >= 2 || !/Timeout/.test(e.message)) throw e; }
+    }
+  });
+  captureLock = run.catch(() => {});
+  return run;
+}
+
 // Late-loading content (images, fonts, injected banners) keeps reflowing long pages after `load`.
 // Poll until the quote stops moving, shoot, and re-shoot if it moved during the capture.
 async function screenshotStable(page, out) {
@@ -247,7 +275,15 @@ async function screenshotStable(page, out) {
       if (same(prev, cur)) break;
       prev = cur;
     }
-    await page.screenshot({ path: out, clip: cropFor(prev), fullPage: true });
+    // Capture from the viewport, not fullPage: fullPage resizes the window to the whole document
+    // (~20k px on Wikipedia), which triggers lazy loading and intermittently stalls rendering.
+    // Center the crop so sticky headers don't cover it.
+    const clip = cropFor(prev);
+    const vh = page.viewportSize().height;
+    clip.height = Math.min(clip.height, vh - 40);
+    const sy = await page.evaluate((y) => { window.scrollTo(0, Math.max(0, y)); return window.scrollY; }, clip.y - (vh - clip.height) / 2);
+    prev = await page.evaluate(measureStored); // scrolling can shift lazy content; re-check below
+    await captureExclusive(page, { path: out, clip: { ...clip, y: clip.y - sy } });
     if (same(prev, await page.evaluate(measureStored))) return;
   }
 }
@@ -263,7 +299,23 @@ async function snapUrl(browser, base, items, timeout) {
   const shots = items.some((it) => it.out);
   const page = await browser.newPage({ viewport: { width: 1100, height: 900 }, deviceScaleFactor: shots ? 2 : 1 });
   try {
-    if (!shots) await page.route('**/*', (r) => (SLOW_TYPES.has(r.request().resourceType()) ? r.abort() : r.continue()));
+    const problem = urlProblem(base);
+    if (problem) throw new Error(problem);
+    // Applies to every request, not just the initial URL.
+    await page.route('**/*', async (r) => {
+      const req = r.request();
+      if (urlProblem(req.url(), { subresource: !req.isNavigationRequest() })) return r.abort('blockedbyclient');
+      if (!shots && SLOW_TYPES.has(req.resourceType())) return r.abort();
+      if (req.isNavigationRequest()) {
+        // Route handlers don't see redirect hops, so fetch without following redirects,
+        // vet the Location, then hand the 3xx to the browser (its follow-up is routed again).
+        const resp = await r.fetch({ maxRedirects: 0 });
+        const loc = resp.headers()['location'];
+        if (loc && urlProblem(new URL(loc, req.url()).href)) return r.abort('blockedbyclient');
+        return r.fulfill({ response: resp });
+      }
+      return r.continue();
+    });
     const resp = await page.goto(base, { waitUntil: 'domcontentloaded', timeout });
     const ctype = resp?.headers()['content-type'] || '';
     if (!ctype.includes('html')) throw new Error(`Unsupported content-type: ${ctype || 'unknown'}`);
