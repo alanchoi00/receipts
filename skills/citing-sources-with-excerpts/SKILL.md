@@ -101,7 +101,6 @@ Clients should not cache rate-limit responses:
 
 - No `retrieved` date (the answer is the retrieval).
 - Save chat screenshots under the system temp directory (e.g. `$TMPDIR/receipts/<slug>.png`), never into the user's project. If your host has a tool for showing the user a file or image, show each screenshot with it; otherwise give each one's full absolute path on its own line after the quote.
-- No screenshots requested → end the answer with a one-line offer, e.g. "Want screenshots of these passages?"
 
 **Both:**
 - Your own reasoning or recommendation gets no quote; say it is your (or the team's) reasoning, not the source's. A factual claim about the outside world (how libraries, browsers, or standards behave) needs a citation or must be phrased as an expectation.

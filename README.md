@@ -82,7 +82,7 @@ The first time Claude uses the plugin, it installs a headless browser (Playwrigh
 
 ## Screenshot options
 
-Screenshots are off unless you ask (in chat, Claude offers them at the end of its answer). They only add about half a second per page; they're off so your project doesn't fill up with images. When you ask, describe what you want in plain words:
+Screenshots are off unless you ask. They only add about half a second per page; they're off so your project doesn't fill up with images. When you ask, describe what you want in plain words:
 
 | Say | You get |
 |---|---|
