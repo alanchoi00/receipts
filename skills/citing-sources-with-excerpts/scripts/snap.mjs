@@ -234,16 +234,15 @@ METADATA.addSubnet('169.254.0.0', 16, 'ipv4'); // AWS/GCP/Azure IMDS + link-loca
 METADATA.addAddress('100.100.100.200', 'ipv4'); // Alibaba Cloud
 METADATA.addSubnet('fe80::', 10, 'ipv6');
 METADATA.addAddress('fd00:ec2::254', 'ipv6'); // AWS IMDS over IPv6
+// The same IPv4 targets embedded in IPv6: mapped (::ffff:0:0/96), compatible (::/96), NAT64 (64:ff9b::/96).
+// BlockList parses any IPv6 text form, so ::ffff:169.254.169.254 and ::ffff:a9fe:a9fe both match.
+for (const prefix of ['::ffff:', '::', '64:ff9b::']) {
+  METADATA.addSubnet(`${prefix}169.254.0.0`, 112, 'ipv6');
+  METADATA.addAddress(`${prefix}100.100.100.200`, 'ipv6');
+}
 const METADATA_NAMES = new Set(['metadata', 'metadata.google.internal', 'instance-data', 'instance-data.ec2.internal']);
 
 function blockedIp(ip) {
-  // IPv4-mapped IPv6, dotted (::ffff:169.254.169.254) or hex (::ffff:a9fe:a9fe, as URL() normalizes it)
-  let m = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
-  if (m) ip = m[1];
-  else if ((m = ip.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i))) {
-    const [hi, lo] = [parseInt(m[1], 16), parseInt(m[2], 16)];
-    ip = [hi >> 8, hi & 255, lo >> 8, lo & 255].join('.');
-  }
   const v = isIP(ip);
   return v ? METADATA.check(ip, v === 4 ? 'ipv4' : 'ipv6') : false;
 }
