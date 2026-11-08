@@ -6,9 +6,11 @@
 //   node snap.mjs <url> [--quote "text"] [--out shot.png] [--prefix "words before"] [--suffix "words after"]
 //                 [--frame quote|paragraph|section|viewport] [--context N] [--width PX] [--max-height PX]
 //                 [--highlight COLOR|none] [--theme light|dark] [--scale 1|2|3] [--timeout MS]
+//   node snap.mjs <url> --find "words" [--max 5]   (discover sentences containing the words)
 //   node snap.mjs --batch cites.json        (or --batch - to read stdin)
 // <url> may already contain a text fragment (#:~:text=[prefix-,]start[,end][,-suffix]).
-// Batch input: [{"url", "quote", "out"?, ...options}] or {"defaults": {...options}, "cites": [...]}.
+// Batch input: [{"url", "quote" | "find", "out"?, "alternates"?, "timeout"?, ...options}]
+//   or {"defaults": {...options}, "cites": [...]}.
 // Single mode prints one JSON object; batch prints an array in input order.
 // Exit 0 = all found, 1 = some not found, 2 = some error.
 
@@ -51,7 +53,8 @@ function parseArgs(argv) {
   const args = { timeout: 30000 };
   const flags = { '--quote': 'quote', '--out': 'out', '--batch': 'batch', '--prefix': 'prefix', '--suffix': 'suffix',
     '--frame': 'frame', '--context': 'context', '--width': 'width', '--max-height': 'max_height',
-    '--highlight': 'highlight', '--theme': 'theme', '--scale': 'scale', '--timeout': 'timeout' };
+    '--highlight': 'highlight', '--theme': 'theme', '--scale': 'scale', '--timeout': 'timeout',
+    '--find': 'find', '--max': 'max' };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -108,7 +111,7 @@ function buildFragmentUrl(base, text, { forceRange = false, prefix = null, suffi
 
 // Runs inside the page. Builds a normalized text index, locates the quote, highlights it,
 // stores what's needed to re-measure geometry later (window.__citeMeasure), returns metadata.
-function locateInPage({ start, end, prefix, suffix, includeHidden, allowFuzzy, highlight }) {
+function locateInPage({ start, end, prefix, suffix, includeHidden, allowFuzzy, highlight, find, max }) {
   const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'SVG', 'HEAD']);
   const blockOf = (el) => {
     while (el && el !== document.body) {
@@ -149,6 +152,27 @@ function locateInPage({ start, end, prefix, suffix, includeHidden, allowFuzzy, h
     lastBlock = b;
     nodes.push({ node: n, rawStart: raw.length });
     raw += n.nodeValue;
+  }
+
+  // Discovery: sentences (within one line/block) that contain every word of `find`; exact phrase first.
+  if (find) {
+    const norm = (t) => t.toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"')
+      .replace(/[\u2013\u2014]/g, '-').replace(/\s+/g, ' ').trim();
+    const want = norm(find);
+    const words = want.split(' ').filter(Boolean);
+    const hits = [];
+    // Blocks, then blank-line paragraphs (preformatted text like RFCs), then sentences.
+    for (const block of raw.split(/\u2029|\n\s*\n/)) {
+      for (const piece of block.split(/(?<=[.!?])\s+(?=[\p{Lu}\p{N}"\u201C(\[])/u)) {
+        const sent = piece.replace(/\s+/g, ' ').trim();
+        if (sent.split(' ').length < 3 || hits.some((h) => h.sent === sent)) continue;
+        const n = norm(sent);
+        const phrase = n.includes(want);
+        if (phrase || words.every((w) => n.includes(w))) hits.push({ sent, phrase });
+      }
+    }
+    hits.sort((a, b) => b.phrase - a.phrase);
+    return { sentences: hits.slice(0, max).map((h) => h.sent), total: hits.length, signals: signals() };
   }
 
   const CHARMAP = { '‘': "'", '’': "'", '“': '"', '”': '"', '–': '-', '—': '-', ' ': ' ' };
@@ -200,7 +224,8 @@ function locateInPage({ start, end, prefix, suffix, includeHidden, allowFuzzy, h
     const words = (s) => (s.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []);
     const want = new Set(words(start + ' ' + (end || '')));
     if (want.size < 3) return null;
-    const re = /[^.!?\u2029]+[.!?]?/g;
+    // Sentences end at . ! ?, a block boundary, or a blank line (paragraphs in preformatted text).
+    const re = /(?:(?!\n[^\S\n]*\n)[^.!?\u2029])+[.!?]?/g;
     let best = null;
     for (let m; (m = re.exec(raw)); ) {
       const w = new Set(words(m[0]));
@@ -595,6 +620,8 @@ function friendlyError(e, base, blockedBy) {
   let error = String(e.message || e).split('\n')[0];
   if (blockedBy && /ERR_BLOCKED_BY_CLIENT/.test(error)) error = `${blockedBy} (reached via redirect from ${base})`;
   else if (/Download is starting/.test(error) || /\.pdf($|\?)/i.test(base)) error = 'Not an HTML page (PDF or file download) - not supported; cite with a manual excerpt';
+  const t = error.match(/Timeout (\d+)ms exceeded/);
+  if (t) error = `Timed out after ${Math.round(t[1] / 1000)}s loading the page (raise "timeout" once, or use another source)`;
   return error;
 }
 
@@ -638,14 +665,58 @@ async function snapGroup(browser, base, items, timeout) {
     const resp = await page.goto(base, { waitUntil: 'domcontentloaded', timeout });
     const ctype = resp?.headers()['content-type'] || '';
     if (!ctype.includes('html')) throw new Error(`Unsupported content-type: ${ctype || 'unknown'}`);
-    if (resp && resp.status() >= 400) throw new Error(`HTTP ${resp.status()}`);
+    if (resp && resp.status() >= 400) {
+      const st = resp.status();
+      throw new Error(`HTTP ${st}${[401, 403, 429, 451].includes(st) ? ' (the site refused automated access: use another source or "alternates", and don\'t try to get around it)' : ''}`);
+    }
     // Classify where we actually landed (after redirects).
     const finalHost = hostOf(new URL(page.url()));
     const internal = isInternal(finalHost, await resolveHost(finalHost));
 
     const retrieved = new Date().toISOString().slice(0, 10);
+    const linkFor = (found) => {
+      const pin = found.occurrences > 1;
+      return buildFragmentUrl(base, found.quoteOnPage, {
+        forceRange: found.domDiffers,
+        lines: found.lines,
+        markerTerms: found.markerTerms,
+        prefix: pin ? found.before || null : null,
+        suffix: pin ? found.after || null : null,
+      });
+    };
+    const blockedError = (signals) => (signals?.challenge
+      ? 'Bot check (e.g. Cloudflare) blocked the page - the quote could not be checked; mark it UNVERIFIED'
+      : signals?.password ? 'Login wall: the page asks for a password and the quote is not visible - mark it UNVERIFIED' : null);
     let waited = false;
     for (const it of items) {
+      if (it.find) {
+        let f = await page.evaluate(locateInPage, { find: it.find, max: it.max });
+        if (!f.sentences.length && !waited) {
+          waited = true;
+          await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+          await page.waitForTimeout(500);
+          f = await page.evaluate(locateInPage, { find: it.find, max: it.max });
+        }
+        const result = { ok: false, match: 'none', url: base, find: it.find, title: await page.title(), retrieved };
+        const matches = [];
+        for (const sent of f.sentences) {
+          const g = await page.evaluate(locateInPage, { start: sent, includeHidden: false, allowFuzzy: false, highlight: it.shot.highlight });
+          if (g.match === 'none') continue;
+          if (g.pageTitle) result.title = g.pageTitle;
+          const m = { quote_on_page: g.quoteOnPage, fragment_url: linkFor(g) };
+          if (g.section && !result.title.toLowerCase().includes(g.section.toLowerCase())) m.section = g.section;
+          matches.push(m);
+        }
+        if (matches.length) Object.assign(result, { ok: true, match: 'found', matches });
+        else { const e = blockedError(f.signals); if (e) result.error = e; }
+        const notes = [];
+        if (f.total > matches.length && matches.length) notes.push(`${f.total} sentences matched; showing the first ${matches.length}. Narrow "find" or raise "max".`);
+        if (it.out) notes.push('"find" returns sentences only. To screenshot one, re-run it as "quote" with "out".');
+        if (notes.length) result.note = notes.join(' ');
+        if (internal) result.internal = true;
+        it.result = result;
+        continue;
+      }
       const base_ = { start: it.start, end: it.end, prefix: it.prefix, suffix: it.suffix, highlight: it.shot.highlight };
       // Visible text first; then hidden text (collapsed sections, tabs); fuzzy only as a last resort.
       const attempts = [{ includeHidden: false, allowFuzzy: false }, { includeHidden: true, allowFuzzy: false }, { includeHidden: false, allowFuzzy: true }];
@@ -668,21 +739,14 @@ async function snapGroup(browser, base, items, timeout) {
       }
       const result = { ok: found.match !== 'none', match: found.match, url: base, title: found.pageTitle || (await page.title()), retrieved };
       if (!result.ok) {
-        if (found.signals?.challenge) result.error = 'Bot check (e.g. Cloudflare) blocked the page - the quote could not be checked; mark it UNVERIFIED';
-        else if (found.signals?.password) result.error = 'Login wall: the page asks for a password and the quote is not visible - mark it UNVERIFIED';
+        const e = blockedError(found.signals);
+        if (e) result.error = e;
         it.result = result;
         continue;
       }
       const notes = [];
       result.quote_on_page = found.quoteOnPage;
-      const pin = found.occurrences > 1;
-      result.fragment_url = buildFragmentUrl(base, found.quoteOnPage, {
-        forceRange: found.domDiffers,
-        lines: found.lines,
-        markerTerms: found.markerTerms,
-        prefix: pin ? found.before || null : null,
-        suffix: pin ? found.after || null : null,
-      });
+      result.fragment_url = linkFor(found);
       // Skip a section that just repeats the page title (e.g. MDN's h1).
       if (found.section && !result.title.toLowerCase().includes(found.section.toLowerCase())) result.section = found.section;
       result.excerpt = found.excerpt;
@@ -691,9 +755,8 @@ async function snapGroup(browser, base, items, timeout) {
       if (found.occurrences > 1) {
         result.occurrences = found.occurrences;
         result.occurrence = found.occurrence;
-        notes.push(it.prefix || it.suffix
-          ? (found.contextMissed ? `prefix/suffix matched none of the ${found.occurrences} occurrences; used the first.` : `Picked occurrence ${found.occurrence} of ${found.occurrences} using prefix/suffix.`)
-          : `Quote appears ${found.occurrences} times; matched the first. If you meant another, re-run with prefix/suffix (words just before/after it).`);
+        // occurrences/occurrence carry the details; only a failed prefix/suffix is worth a note.
+        if (found.contextMissed) notes.push(`prefix/suffix matched none of the ${found.occurrences} occurrences; used the first.`);
       }
       if (found.revealed) notes.push('Quote was inside collapsed content; it was expanded for the screenshot.');
       if (found.hidden) {
@@ -721,40 +784,69 @@ async function snapGroup(browser, base, items, timeout) {
   }
 }
 
+const BLOCKED = /^HTTP (401|403|429|451)\b|^Bot check|^Login wall/;
+
 async function run(input, timeout) {
   const { defaults = {}, cites } = Array.isArray(input) ? { cites: input } : input;
   if (!Array.isArray(cites)) throw new Error('Batch input must be an array or {"defaults": {...}, "cites": [...]}');
   const items = cites.map((c, idx) => {
     const r = { ...defaults, ...c };
-    const { base, fragment } = parseTextFragment(r.url || '');
+    // "alternates": other URLs for the same quote, tried in order when one fails or lacks it.
+    const urls = [r.url, ...(Array.isArray(r.alternates) ? r.alternates : [])].filter((u) => typeof u === 'string' && u);
+    const { fragment } = parseTextFragment(r.url || '');
     const start = r.quote ?? fragment?.start;
     const [shot, optError] = screenshotOptions(r);
+    let t = timeout, tError = null;
+    if (r.timeout !== undefined && r.timeout !== null) {
+      const n = Number(r.timeout);
+      if (Number.isFinite(n)) t = Math.min(120000, Math.max(1000, Math.round(n)));
+      else tError = `timeout must be milliseconds (got ${JSON.stringify(r.timeout)})`;
+    }
     const it = {
-      idx, base, start, end: r.quote ? null : fragment?.end ?? null, out: r.out, shot,
+      idx, urls, attempt: 0, tried: [], timeout: t, start, end: r.quote ? null : fragment?.end ?? null, out: r.out, shot,
+      find: typeof r.find === 'string' && r.find.trim() ? r.find.trim() : null,
+      max: Math.min(20, Math.max(1, Math.round(Number(r.max) || 5))),
       prefix: r.prefix ?? (r.quote ? null : fragment?.prefix) ?? null,
       suffix: r.suffix ?? (r.quote ? null : fragment?.suffix) ?? null,
     };
-    if (!r.url || !start) it.result = { ok: false, url: r.url ?? null, error: 'Need url plus quote (or a #:~:text= URL)' };
-    else if (optError) it.result = { ok: false, url: r.url, error: optError };
+    if (!urls.length || (!start && !it.find)) it.result = { ok: false, url: r.url ?? null, error: 'Need url plus quote or find (or a #:~:text= URL)' };
+    else if (optError || tError) it.result = { ok: false, url: r.url, error: optError || tError };
     return it;
   });
-  const groups = new Map();
-  for (const it of items) {
-    if (it.result) continue;
-    const key = [it.base, it.shot.width, it.shot.theme, it.out ? it.shot.scale : 1].join('|');
-    groups.set(key, [...(groups.get(key) || []), it]);
-  }
-  if (groups.size) {
+  let pending = items.filter((it) => !it.result);
+  if (pending.length) {
     const browser = await chromium.launch();
     try {
-      const queue = [...groups.values()];
-      const worker = async () => { for (let g; (g = queue.shift()); ) await snapGroup(browser, g[0].base, g, timeout); };
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
+      while (pending.length) {
+        const groups = new Map();
+        for (const it of pending) {
+          it.base = parseTextFragment(it.urls[it.attempt]).base;
+          const key = [it.base, it.shot.width, it.shot.theme, it.out ? it.shot.scale : 1, it.timeout].join('|');
+          groups.set(key, [...(groups.get(key) || []), it]);
+        }
+        const queue = [...groups.values()];
+        const worker = async () => { for (let g; (g = queue.shift()); ) await snapGroup(browser, g[0].base, g, g[0].timeout); };
+        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
+        const next = [];
+        for (const it of pending) {
+          if (it.result.ok || it.attempt + 1 >= it.urls.length) continue;
+          it.tried.push(it.result.error ? { url: it.base, error: it.result.error } : { url: it.base, match: it.result.match });
+          it.attempt++;
+          it.result = undefined;
+          next.push(it);
+        }
+        pending = next;
+      }
     } finally {
       await browser.close();
     }
   }
-  return items.map((it) => it.result);
+  return items.map((it) => {
+    const r = it.result;
+    if (it.tried.length) r.tried = it.tried;
+    if (r.error && BLOCKED.test(r.error)) r.blocked = true;
+    return r;
+  });
 }
 
 const exitCode = (results) => (results.some((r) => r.error) ? 2 : results.some((r) => !r.ok) ? 1 : 0);

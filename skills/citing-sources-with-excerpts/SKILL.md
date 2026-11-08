@@ -26,18 +26,24 @@ npm install --prefix <skill-dir>/scripts && npx --prefix <skill-dir>/scripts pla
 
 ## The script
 
-Draft the doc or answer first, collect every citation, then verify them **all in one batch call**:
+Aim for **one batch, two at most**, never one per fact. Each entry is either:
+
+- **`find`** — you know the page but not the exact sentence: `{"url": ..., "find": "nasdaq correction"}` returns up to 5 sentences (`"max"` for more) containing those words, exact phrase first, each with its own `fragment_url` and `section`. These come straight from the page, so they are already verified: quote them as is. Use `find` instead of guessing quotes from search-result snippets.
+- **`quote`** — you know the sentence: verify it (and screenshot it with `"out"`).
+
+Put every page and every lookup for the answer into the same batch:
 
 ```bash
 node <skill-dir>/scripts/snap.mjs --batch - <<'EOF'
 [
   {"url": "https://www.rfc-editor.org/rfc/rfc6585.html", "quote": "Responses with the 429 status code MUST NOT be stored by a cache."},
+  {"url": "https://www.rfc-editor.org/rfc/rfc9111.html", "find": "heuristically cacheable"},
   {"url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After", "quote": "A non-negative decimal integer", "out": "/abs/path/docs/refs/delay.png"}
 ]
 EOF
 ```
 
-One browser for the batch; quotes on the same URL share a page load. Use absolute paths for `out`. Input may also be `{"defaults": {...}, "cites": [...]}` to apply screenshot options to every entry. Batch output is a JSON array in input order (single mode, `snap.mjs "<url>" --quote "..."`, prints one object). Each entry:
+One browser for the batch; entries on the same URL share a page load. Use absolute paths for `out`. Per entry, `"alternates": [url2, url3]` tries other URLs for the same quote in order when one fails, and `"timeout"` (ms, default 30000) suits slow pages. Input may also be `{"defaults": {...}, "cites": [...]}` to apply screenshot options to every entry. Batch output is a JSON array in input order (single mode, `snap.mjs "<url>" --quote "..."`, prints one object). Each entry:
 
 | Field | Use |
 |---|---|
@@ -46,6 +52,8 @@ One browser for the batch; quotes on the same URL share a page load. Use absolut
 | `fragment_url` | The link to use (has `#:~:text=`, highlights in Chrome/Safari/Firefox). |
 | `excerpt` | Surrounding paragraph, for checking context (negations, caveats, "except when…"). Want to quote more of it? Re-run with that longer passage as `--quote` so link and screenshot match. |
 | `title`, `section`, `retrieved` | The attribution line: `[<title> — <section>](fragment_url) · retrieved <date>`, or `[<title>](fragment_url)` when `section` is absent. Use these fields; don't add section numbers from memory. |
+| `matches` | For `find`: the sentences found, each with `quote_on_page`, `fragment_url`, `section`. |
+| `blocked`, `tried` | `blocked: true` = the site refused automated access (403, bot check, login wall). `tried` = URLs that failed before the one in `url`. |
 | `occurrences` / `occurrence` | Present when the quote appears more than once. Check `excerpt` is the one you meant; if not, re-run with `prefix`/`suffix` (the words just before/after it on the page). |
 | `hidden` | Quote is in content the page hides (e.g. an inactive tab): verified, but no screenshot. |
 | `note` | Anything else worth knowing (fuzzy match, expanded collapsed section, frame fallback). Read it. |
@@ -102,6 +110,8 @@ Clients should not cache rate-limit responses:
 - No `retrieved` date (the answer is the retrieval).
 - Save chat screenshots under the system temp directory (e.g. `$TMPDIR/receipts/<slug>.png`), never into the user's project. If your host has a tool for showing the user a file or image, show each screenshot with it; otherwise give each one's full absolute path on its own line after the quote.
 
+**Numbers from data** (CSV files, APIs, charts): the script checks text, not datasets. Link the dataset and name its publisher (e.g. FRED series NASDAQCOM, source: Nasdaq, Inc.), give the exact values and dates you used, and label every calculation as yours ("−10.9%, my arithmetic from those closes"). If a page states the figure in prose, quote that sentence instead.
+
 **Both:**
 - Your own reasoning or recommendation gets no quote; say it is your (or the team's) reasoning, not the source's. A factual claim about the outside world (how libraries, browsers, or standards behave) needs a citation or must be phrased as an expectation.
 - Screenshots are **opt-in**: they're cheap (about half a second per page) but add image files the user has to keep or delete. Add `"out"` only when the user asks for screenshots, or, in a markdown file, the evidence is visual (a table, figure, code layout) where the text alone loses meaning. Include an image or path only for entries with `screenshot` in the result.
@@ -113,7 +123,9 @@ Clients should not cache rate-limit responses:
 |---|---|
 | `match: fuzzy` | Use `quote_on_page` (the screenshot already highlights it). If it no longer supports your claim, change the claim. |
 | `match: none` | Search the page another way (different passage, different section URL). Still none → drop the claim or mark it `**UNVERIFIED:**` with a plain link. Never present an unverified quote as a blockquote. |
-| `ok: false` + error (PDF, login wall, bot check, 403) | Plain link + `**UNVERIFIED (could not load: <error>)**`. Do not fabricate the quote from memory or WebFetch. |
+| `blocked: true` | Use another source (or `alternates`). No other source → plain link + `**UNVERIFIED (blocked)**`. Never work around a block: no spoofed user agents, faked headers, proxies or scraping services. |
+| error "Timed out" | Don't resubmit the URL unchanged. Raise `"timeout"` once (e.g. 60000) or use another source. |
+| other `ok: false` (PDF, 404) | Plain link + `**UNVERIFIED (could not load: <error>)**`. Do not fabricate the quote from memory or WebFetch. |
 | `occurrences` > 1 and `excerpt` is the wrong one | Re-run with `"prefix"` or `"suffix"` set to the neighbouring words of the one you meant. |
 
 ## Common Mistakes

@@ -10,7 +10,7 @@ node examples/build.mjs --check    # smoke test: verify only, write nothing
 node examples/build.mjs --offline  # skip the 🌐 cases
 ```
 
-Last run: 2026-11-08 · 49/49 cases pass.
+Last run: 2026-11-08 · 57/57 cases pass.
 
 ## Finding the quote
 
@@ -35,6 +35,9 @@ Last run: 2026-11-08 · 49/49 cases pass.
 | [Text added by JavaScript after load](#js-rendered) | `exact` | ✅ |
 | [Japanese text](#non-latin) | `exact` | ✅ |
 | [Emoji in the quote](#emoji) | `exact` | ✅ |
+| [Discover sentences with "find"](#find-sentences) | `found` | ✅ |
+| ["find" ranks the exact phrase first](#find-phrase-first) | `found` | ✅ |
+| ["find" with no matches](#find-none) | `none` | ✅ |
 
 <a id="exact"></a>
 ### 🌐 Exact quote
@@ -261,7 +264,7 @@ What the skill writes:
 <a id="duplicate-first"></a>
 ### Same text twice, no hint
 
-The sentence appears in two sections. Without a hint the script takes the first, says so, and pins the link to that occurrence with the words before and after it.
+The sentence appears in two sections. Without a hint the script takes the first, reports `occurrences` and `occurrence`, and pins the link to that occurrence with the words before and after it.
 
 <details><summary>Input</summary>
 
@@ -275,8 +278,6 @@ The sentence appears in two sections. Without a hint the script takes the first,
 </details>
 
 **match:** `exact` · **internal:** true · **occurrence:** 1 of 2 · **link:** highlights the quote in Chromium
-
-**note:** Quote appears 2 times; matched the first. If you meant another, re-run with prefix/suffix (words just before/after it).
 
 What the skill writes:
 
@@ -305,8 +306,6 @@ What the skill writes:
 </details>
 
 **match:** `exact` · **internal:** true · **occurrence:** 2 of 2 · **link:** highlights the quote in Chromium
-
-**note:** Picked occurrence 2 of 2 using prefix/suffix.
 
 What the skill writes:
 
@@ -368,8 +367,6 @@ The date appears twice. The words pinning the link to the first one come from th
 </details>
 
 **match:** `exact` · **internal:** true · **occurrence:** 1 of 2 · **link:** highlights the quote in Chromium
-
-**note:** Quote appears 2 times; matched the first. If you meant another, re-run with prefix/suffix (words just before/after it).
 
 What the skill writes:
 
@@ -578,6 +575,67 @@ What the skill writes:
     > — [レート制限](http://127.0.0.1:4317/unicode.html#:~:text=Deploys%20are%20frozen%20on%20Fridays%20%F0%9F%9A%AB%F0%9F%9A%80%20unless%20the%20release%20owner%20approves.) · retrieved 2026-11-08
 ```
 
+<a id="find-sentences"></a>
+### Discover sentences with "find"
+
+When you don't know the exact sentence yet, `find` returns every sentence containing the words, each with its own working link, so one batch can both discover and verify.
+
+<details><summary>Input</summary>
+
+```json
+{
+  "url": "http://127.0.0.1:4317/article.html",
+  "find": "retry"
+}
+```
+
+</details>
+
+**find:** "retry" → 3 sentences
+
+- *Retry behaviour:* [Rejected requests receive status 429 and a Retry-After header.](http://127.0.0.1:4317/article.html#:~:text=Rejected%20requests%20receive%20status%20429%20and%20a%20Retry%2DAfter%20header.)
+- *Retry behaviour:* [Clients should wait for the number of seconds given in the Retry-After header before retrying.](http://127.0.0.1:4317/article.html#:~:text=Clients%20should%20wait%20for%20the%20number%20of%20seconds%20given%20in%20the%20Retry%2DAfter%20header%20before%20retrying.)
+- *Retry behaviour:* [Retrying sooner counts against the budget and extends the wait.](http://127.0.0.1:4317/article.html#:~:text=Retrying%20sooner%20counts%20against%20the%20budget%20and%20extends%20the%20wait.)
+
+<a id="find-phrase-first"></a>
+### "find" ranks the exact phrase first
+
+Sentences containing the exact phrase come before sentences that only contain all the words.
+
+<details><summary>Input</summary>
+
+```json
+{
+  "url": "http://127.0.0.1:4317/article.html",
+  "find": "request budget"
+}
+```
+
+</details>
+
+**find:** "request budget" → 2 sentences
+
+- *Overview:* [Every API key has a request budget that refills continuously.](http://127.0.0.1:4317/article.html#:~:text=Every%20API%20key%20has%20a%20request%20budget%20that%20refills%20continuously.)
+- *Overview:* [When a client exceeds its budget, the API rejects further requests until the budget refills.](http://127.0.0.1:4317/article.html#:~:text=When%20a%20client%20exceeds%20its%20budget%2C%20the%20API%20rejects%20further%20requests%20until%20the%20budget%20refills.)
+
+<a id="find-none"></a>
+### "find" with no matches
+
+No sentence contains the words: `match: none`, nothing to cite from this page.
+
+<details><summary>Input</summary>
+
+```json
+{
+  "url": "http://127.0.0.1:4317/article.html",
+  "find": "blockchain"
+}
+```
+
+</details>
+
+**match:** `none`, not on the page
+
 ## Loading the page
 
 | Case | Result | Pass |
@@ -587,6 +645,11 @@ What the skill writes:
 | [Login wall](#login-wall) | error | ✅ |
 | [Bot check](#bot-check) | error | ✅ |
 | [Ordinary redirect](#redirect) | `exact` | ✅ |
+| [Site refuses automated access](#blocked-403) | error | ✅ |
+| [Falling back to an alternate source](#alternates) | `exact` | ✅ |
+| [Every alternate fails](#alternates-exhausted) | error | ✅ |
+| [Per-citation timeout](#timeout-short) | error | ✅ |
+| [Raised timeout](#timeout-raised) | `exact` | ✅ |
 | [🌐 http → https redirect](#http-to-https) | `exact`, occurrence 1 of 2 | ✅ |
 | [Unreachable host](#unreachable) | error | ✅ |
 | [Invalid option](#bad-option) | error | ✅ |
@@ -643,7 +706,7 @@ The page loads but shows a sign-in form. Reported as a login wall so Claude does
 
 </details>
 
-**error:** Login wall: the page asks for a password and the quote is not visible - mark it UNVERIFIED
+**error:** Login wall: the page asks for a password and the quote is not visible - mark it UNVERIFIED · **blocked:** true
 
 <a id="bot-check"></a>
 ### Bot check
@@ -661,7 +724,7 @@ A Cloudflare-style challenge page. Reported as a bot check, not a missing quote.
 
 </details>
 
-**error:** Bot check (e.g. Cloudflare) blocked the page - the quote could not be checked; mark it UNVERIFIED
+**error:** Bot check (e.g. Cloudflare) blocked the page - the quote could not be checked; mark it UNVERIFIED · **blocked:** true
 
 <a id="redirect"></a>
 ### Ordinary redirect
@@ -689,6 +752,124 @@ What the skill writes:
     > — [Rate limiting guide — Overview](http://127.0.0.1:4317/redirect#:~:text=Every%20API%20key%20has%20a%20request%20budget%20that%20refills%20continuously.) · retrieved 2026-11-08
 ```
 
+<a id="blocked-403"></a>
+### Site refuses automated access
+
+A 403 (or 401, 429, 451, a bot check, a login wall) comes back as `blocked: true`, so Claude moves to another source instead of trying to get around it.
+
+<details><summary>Input</summary>
+
+```json
+{
+  "url": "http://127.0.0.1:4317/forbidden",
+  "quote": "anything"
+}
+```
+
+</details>
+
+**error:** HTTP 403 (the site refused automated access: use another source or "alternates", and don't try to get around it) · **blocked:** true
+
+<a id="alternates"></a>
+### Falling back to an alternate source
+
+`alternates` lists other URLs for the same quote, tried in order. The first is blocked, the second has the quote; `tried` records what failed.
+
+**tried first:** http://127.0.0.1:4317/forbidden (HTTP 403 (the site refused automated access: use another source or "alternates", and don't try to get around it))
+
+<details><summary>Input</summary>
+
+```json
+{
+  "url": "http://127.0.0.1:4317/forbidden",
+  "alternates": [
+    "http://127.0.0.1:4317/article.html"
+  ],
+  "quote": "Every API key has a request budget that refills continuously."
+}
+```
+
+</details>
+
+**match:** `exact` · **internal:** true · **link:** highlights the quote in Chromium
+
+What the skill writes:
+
+```md
+[^alternates]: > Every API key has a request budget that refills continuously.
+    >
+    > — [Rate limiting guide — Overview](http://127.0.0.1:4317/article.html#:~:text=Every%20API%20key%20has%20a%20request%20budget%20that%20refills%20continuously.) · retrieved 2026-11-08
+```
+
+<a id="alternates-exhausted"></a>
+### Every alternate fails
+
+When no URL works, the result reports the last failure and `tried` lists the others.
+
+**tried first:** http://127.0.0.1:4317/forbidden (HTTP 403 (the site refused automated access: use another source or "alternates", and don't try to get around it))
+
+<details><summary>Input</summary>
+
+```json
+{
+  "url": "http://127.0.0.1:4317/forbidden",
+  "alternates": [
+    "http://127.0.0.1:4317/missing.html"
+  ],
+  "quote": "anything"
+}
+```
+
+</details>
+
+**error:** HTTP 404
+
+<a id="timeout-short"></a>
+### Per-citation timeout
+
+This page takes 3 s to respond; a 1.5 s `timeout` gives up with a clear message. Retrying the same URL unchanged would just fail again.
+
+<details><summary>Input</summary>
+
+```json
+{
+  "url": "http://127.0.0.1:4317/slow?delay=3000",
+  "quote": "This page took a while to arrive.",
+  "timeout": 1500
+}
+```
+
+</details>
+
+**error:** Timed out after 2s loading the page (raise "timeout" once, or use another source)
+
+<a id="timeout-raised"></a>
+### Raised timeout
+
+The same slow page with an 8 s `timeout` loads fine.
+
+<details><summary>Input</summary>
+
+```json
+{
+  "url": "http://127.0.0.1:4317/slow?delay=3000",
+  "quote": "This page took a while to arrive.",
+  "timeout": 8000
+}
+```
+
+</details>
+
+**match:** `exact` · **internal:** true · **link:** highlights the quote in Chromium
+
+What the skill writes:
+
+```md
+[^timeout-raised]: > This page took a while to arrive.
+    >
+    > — [Slow](http://127.0.0.1:4317/slow?delay=3000#:~:text=This%20page%20took%20a%20while%20to%20arrive.) · retrieved 2026-11-08
+```
+
 <a id="http-to-https"></a>
 ### 🌐 http → https redirect
 
@@ -706,8 +887,6 @@ Most sites redirect plain http.
 </details>
 
 **match:** `exact` · **occurrence:** 1 of 2 · **link:** highlights the quote in Chromium
-
-**note:** Quote appears 2 times; matched the first. If you meant another, re-run with prefix/suffix (words just before/after it).
 
 What the skill writes:
 
@@ -1441,8 +1620,6 @@ RFC 9110 reflows as fonts and styles arrive. The script waits until the quote st
 </details>
 
 **match:** `exact` · **occurrence:** 1 of 2 · **link:** highlights the quote in Chromium
-
-**note:** Quote appears 2 times; matched the first. If you meant another, re-run with prefix/suffix (words just before/after it).
 
 What the skill writes:
 

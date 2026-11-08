@@ -36,6 +36,11 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.json'
 const server = createServer((req, res) => {
   const url = new URL(req.url, BASE);
   if (url.pathname === '/redirect') { res.writeHead(302, { Location: '/article.html' }); return res.end(); }
+  if (url.pathname === '/forbidden') { res.writeHead(403, { 'Content-Type': TYPES['.html'] }); return res.end('<h1>Access denied</h1>'); }
+  if (url.pathname === '/slow') {
+    const delay = Math.min(10000, Number(url.searchParams.get('delay')) || 0);
+    return setTimeout(() => { res.writeHead(200, { 'Content-Type': TYPES['.html'] }); res.end('<!doctype html><title>Slow</title><p>This page took a while to arrive.</p>'); }, delay);
+  }
   if (url.pathname === '/redirect-metadata') { res.writeHead(302, { Location: 'http://169.254.169.254/latest/meta-data/' }); return res.end(); }
   if (url.pathname === '/data.json') {
     const delay = Math.min(5000, Number(url.searchParams.get('delay')) || 0);
@@ -57,7 +62,13 @@ function verify(result, expect) {
   const has = (field, sub) => typeof result[field] === 'string' && result[field].includes(sub);
   for (const [k, v] of Object.entries(expect)) {
     if (k === 'link') continue; // checked in the browser, below
-    if (k === 'error' || k === 'note' || k === 'fragment') {
+    if (k === 'matches' || k === 'tried') {
+      const n = result[k]?.length ?? 0;
+      if (n !== v) fails.push(`${k} should have ${v} entries (got ${n})`);
+    } else if (k === 'first_match') {
+      const q = result.matches?.[0]?.quote_on_page ?? '';
+      if (!q.includes(v)) fails.push(`first match should contain ${JSON.stringify(v)} (got ${JSON.stringify(q)})`);
+    } else if (k === 'error' || k === 'note' || k === 'fragment' || k === 'url') {
       const field = k === 'fragment' ? 'fragment_url' : k;
       if (!has(field, v)) fails.push(`${field} should contain ${JSON.stringify(v)} (got ${JSON.stringify(result[field] ?? null)})`);
     } else if (k === 'screenshot') {
@@ -121,9 +132,14 @@ function readme(data, rows) {
     for (const { c, r, fails } of gr) {
       out.push(`<a id="${c.id}"></a>`, `### ${c.live ? '🌐 ' : ''}${c.title}`, '', c.why, '');
       if (c.prompt) out.push(`Prompt wording: ${c.prompt}`, '');
+      if (r.tried) out.push(`**tried first:** ${r.tried.map((t) => `${t.url.replaceAll(BASE, 'http://127.0.0.1:4317')} (${t.error || t.match})`).join('; ')}`, '');
       if (fails.length) out.push(`> [!WARNING]\n> Failed: ${fails.join('; ')}`, '');
       out.push('<details><summary>Input</summary>', '', code('json', shownInput(c)), '', '</details>', '');
-      if (r.ok) {
+      if (r.ok && r.matches) {
+        out.push(`**find:** "${r.find}" → ${r.matches.length} sentence${r.matches.length === 1 ? '' : 's'}`, '');
+        for (const m of r.matches) out.push(`- ${m.section ? `*${m.section}:* ` : ''}[${m.quote_on_page}](${m.fragment_url.replaceAll(BASE, 'http://127.0.0.1:4317')})${m.link === false ? ' (link does not highlight)' : ''}`);
+        out.push('');
+      } else if (r.ok) {
         const bits = [`**match:** \`${r.match}\``];
         if (r.internal) bits.push('**internal:** true');
         if (r.occurrences) bits.push(`**occurrence:** ${r.occurrence} of ${r.occurrences}`);
@@ -135,7 +151,7 @@ function readme(data, rows) {
         out.push('What the skill writes:', '', code('md', footnote(c, r).replaceAll(BASE, 'http://127.0.0.1:4317')), '');
         if (r.screenshot) out.push(`<img src="refs/${c.id}.png" alt="${c.title}" width="${Math.min(720, c.cite.width || 720)}">`, '');
       } else {
-        out.push(r.error ? `**error:** ${r.error}` : '**match:** `none`, not on the page', '');
+        out.push(r.error ? `**error:** ${r.error}${r.blocked ? ' · **blocked:** true' : ''}` : '**match:** `none`, not on the page', '');
       }
     }
   }
@@ -192,6 +208,7 @@ async function linkMatches(browser, url) {
 }
 // Cases may set expect.link to false: the link is known not to highlight (e.g. text added after load).
 const toCheck = cases.map((c, i) => [c, results[i]]).filter(([c, r]) => r?.ok && r.fragment_url && !r.hidden);
+const matchChecks = cases.flatMap((c, i) => (results[i]?.matches || []).map((m) => [c, m]));
 const linkResults = new Map();
 {
   const browser = await chromium.launch();
@@ -201,6 +218,10 @@ const linkResults = new Map();
     const queue = [...toCheck];
     const worker = async () => { for (let item; (item = queue.shift()); ) linkResults.set(item[0].id, await linkMatches(browser, item[1].fragment_url)); };
     await Promise.all(Array.from({ length: 4 }, worker));
+    // Every sentence "find" returns must have a working link too.
+    const mq = [...matchChecks];
+    const mworker = async () => { for (let item; (item = mq.shift()); ) item[1].link = await linkMatches(browser, item[1].fragment_url); };
+    await Promise.all(Array.from({ length: 4 }, mworker));
   } finally {
     await browser.close();
   }
@@ -210,12 +231,13 @@ const rows = cases.map((c, i) => {
   const fails = verify(results[i], c.expect);
   const link = linkResults.get(c.id);
   const shown = results[i]?.fragment_url?.replaceAll(BASE, 'http://127.0.0.1:4317');
+  for (const m of results[i]?.matches || []) if (m.link === false) fails.push(`a "find" match link doesn't highlight in Chromium: ${m.fragment_url.replaceAll(BASE, 'http://127.0.0.1:4317')}`);
   if (c.expect.link === false) { if (link === true) fails.push(`expected the link not to highlight, but it did: ${shown}`); }
   else if (link === false) fails.push(`fragment_url doesn't highlight the quote in Chromium: ${shown}`);
   return { c, r: { ...results[i], link }, fails };
 });
 
-console.log(`links checked in Chromium: ${[...linkResults.values()].filter(Boolean).length}/${linkResults.size} highlight their quote`);
+console.log(`links checked in Chromium: ${[...linkResults.values()].filter(Boolean).length}/${linkResults.size} highlight their quote; find matches: ${matchChecks.filter(([, m]) => m.link).length}/${matchChecks.length}`);
 for (const { c, fails } of rows) console.log(`${fails.length ? '✗' : '✓'} ${c.id}${fails.length ? `\n    ${fails.join('\n    ')}` : ''}`);
 const failed = rows.filter((r) => r.fails.length).length;
 console.log(`\n${rows.length - failed}/${rows.length} passed in ${((Date.now() - t0) / 1000).toFixed(1)}s`);

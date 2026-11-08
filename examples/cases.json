@@ -65,16 +65,16 @@
     {
       "id": "duplicate-first", "group": "matching",
       "title": "Same text twice, no hint",
-      "why": "The sentence appears in two sections. Without a hint the script takes the first, says so, and pins the link to that occurrence with the words before and after it.",
+      "why": "The sentence appears in two sections. Without a hint the script takes the first, reports `occurrences` and `occurrence`, and pins the link to that occurrence with the words before and after it.",
       "cite": { "url": "{{base}}/duplicate.html", "quote": "the default timeout is 30 seconds" },
-      "expect": { "ok": true, "match": "exact", "occurrences": 2, "occurrence": 1, "note": "appears 2 times", "fragment": "client%2C-," }
+      "expect": { "ok": true, "match": "exact", "occurrences": 2, "occurrence": 1, "fragment": "client%2C-," }
     },
     {
       "id": "duplicate-prefix", "group": "matching",
       "title": "Same text twice, picked with prefix",
       "why": "`prefix` selects the second occurrence; the screenshot highlights that one.",
       "cite": { "url": "{{base}}/duplicate.html", "quote": "the default timeout is 30 seconds", "prefix": "On the server,", "out": true },
-      "expect": { "ok": true, "match": "exact", "occurrence": 2, "note": "Picked occurrence 2", "fragment": "server%2C-,", "screenshot": true }
+      "expect": { "ok": true, "match": "exact", "occurrence": 2, "fragment": "server%2C-,", "screenshot": true }
     },
     {
       "id": "line-breaks",
@@ -143,6 +143,30 @@
     },
 
     {
+      "id": "find-sentences",
+      "group": "matching",
+      "title": "Discover sentences with \"find\"",
+      "why": "When you don't know the exact sentence yet, `find` returns every sentence containing the words, each with its own working link, so one batch can both discover and verify.",
+      "cite": { "url": "{{base}}/article.html", "find": "retry" },
+      "expect": { "ok": true, "match": "found", "matches": 3, "first_match": "Retry-After header." }
+    },
+    {
+      "id": "find-phrase-first",
+      "group": "matching",
+      "title": "\"find\" ranks the exact phrase first",
+      "why": "Sentences containing the exact phrase come before sentences that only contain all the words.",
+      "cite": { "url": "{{base}}/article.html", "find": "request budget" },
+      "expect": { "ok": true, "match": "found", "matches": 2, "first_match": "Every API key has a request budget" }
+    },
+    {
+      "id": "find-none",
+      "group": "matching",
+      "title": "\"find\" with no matches",
+      "why": "No sentence contains the words: `match: none`, nothing to cite from this page.",
+      "cite": { "url": "{{base}}/article.html", "find": "blockchain" },
+      "expect": { "ok": false, "match": "none" }
+    },
+    {
       "id": "pdf", "group": "loading",
       "title": "PDF",
       "why": "Only HTML pages are supported. Claude marks the citation UNVERIFIED.",
@@ -161,20 +185,60 @@
       "title": "Login wall",
       "why": "The page loads but shows a sign-in form. Reported as a login wall so Claude doesn't claim the source lacks the quote.",
       "cite": { "url": "{{base}}/login.html", "quote": "Internal roadmap for Q3" },
-      "expect": { "ok": false, "error": "Login wall" }
+      "expect": { "ok": false, "blocked": true, "error": "Login wall" }
     },
     {
       "id": "bot-check", "group": "loading",
       "title": "Bot check",
       "why": "A Cloudflare-style challenge page. Reported as a bot check, not a missing quote.",
       "cite": { "url": "{{base}}/challenge.html", "quote": "anything at all here" },
-      "expect": { "ok": false, "error": "Bot check" }
+      "expect": { "ok": false, "blocked": true, "error": "Bot check" }
     },
     {
       "id": "redirect", "group": "loading",
       "title": "Ordinary redirect",
       "why": "Moved pages are followed.",
       "cite": { "url": "{{base}}/redirect", "quote": "Every API key has a request budget that refills continuously." },
+      "expect": { "ok": true, "match": "exact" }
+    },
+    {
+      "id": "blocked-403",
+      "group": "loading",
+      "title": "Site refuses automated access",
+      "why": "A 403 (or 401, 429, 451, a bot check, a login wall) comes back as `blocked: true`, so Claude moves to another source instead of trying to get around it.",
+      "cite": { "url": "{{base}}/forbidden", "quote": "anything" },
+      "expect": { "ok": false, "blocked": true, "error": "HTTP 403" }
+    },
+    {
+      "id": "alternates",
+      "group": "loading",
+      "title": "Falling back to an alternate source",
+      "why": "`alternates` lists other URLs for the same quote, tried in order. The first is blocked, the second has the quote; `tried` records what failed.",
+      "cite": { "url": "{{base}}/forbidden", "alternates": ["{{base}}/article.html"], "quote": "Every API key has a request budget that refills continuously." },
+      "expect": { "ok": true, "match": "exact", "url": "/article.html", "tried": 1 }
+    },
+    {
+      "id": "alternates-exhausted",
+      "group": "loading",
+      "title": "Every alternate fails",
+      "why": "When no URL works, the result reports the last failure and `tried` lists the others.",
+      "cite": { "url": "{{base}}/forbidden", "alternates": ["{{base}}/missing.html"], "quote": "anything" },
+      "expect": { "ok": false, "error": "HTTP 404", "tried": 1 }
+    },
+    {
+      "id": "timeout-short",
+      "group": "loading",
+      "title": "Per-citation timeout",
+      "why": "This page takes 3 s to respond; a 1.5 s `timeout` gives up with a clear message. Retrying the same URL unchanged would just fail again.",
+      "cite": { "url": "{{base}}/slow?delay=3000", "quote": "This page took a while to arrive.", "timeout": 1500 },
+      "expect": { "ok": false, "error": "Timed out after" }
+    },
+    {
+      "id": "timeout-raised",
+      "group": "loading",
+      "title": "Raised timeout",
+      "why": "The same slow page with an 8 s `timeout` loads fine.",
+      "cite": { "url": "{{base}}/slow?delay=3000", "quote": "This page took a while to arrive.", "timeout": 8000 },
       "expect": { "ok": true, "match": "exact" }
     },
     {
