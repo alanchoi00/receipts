@@ -77,6 +77,22 @@
       "expect": { "ok": true, "match": "exact", "occurrence": 2, "note": "Picked occurrence 2", "fragment": "server%2C-,", "screenshot": true }
     },
     {
+      "id": "line-breaks",
+      "group": "matching",
+      "title": "Quote spans lines split by <br>",
+      "why": "Fact boxes often put each line in one paragraph separated by <br>. The lines count as separate, so the quote reads with a space between them, and the link uses one start and one end piece, each within a single line, because browsers won't match a piece across a line break.",
+      "cite": { "url": "{{base}}/facts.html", "quote": "FULL NAME: Ada Example BORN: March 1, 1994", "out": true },
+      "expect": { "ok": true, "match": "exact", "fragment": "FULL%20NAME%3A%20Ada%20Example,BORN%3A%20March%201%2C%201994", "screenshot": true }
+    },
+    {
+      "id": "line-breaks-pinned",
+      "group": "matching",
+      "title": "Repeated text next to a <br>",
+      "why": "The date appears twice. The words pinning the link to the first one come from the same line (\"BORN:\"), never glued across the line break (\"Ada ExampleBORN:\"), which no browser would match.",
+      "cite": { "url": "{{base}}/facts.html", "quote": "March 1, 1994" },
+      "expect": { "ok": true, "match": "exact", "occurrences": 2, "occurrence": 1, "fragment": "#:~:text=BORN%3A-,March%201%2C%201994" }
+    },
+    {
       "id": "long-quote", "group": "matching",
       "title": "Very long quote",
       "why": "Over 160 characters, so the link uses the short start,end form instead of the whole sentence.",

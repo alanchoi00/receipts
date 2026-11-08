@@ -10,7 +10,7 @@ node examples/build.mjs --check    # smoke test: verify only, write nothing
 node examples/build.mjs --offline  # skip the 🌐 cases
 ```
 
-Last run: 2026-11-08 · 46/46 cases pass.
+Last run: 2026-11-08 · 48/48 cases pass.
 
 ## Finding the quote
 
@@ -26,6 +26,8 @@ Last run: 2026-11-08 · 46/46 cases pass.
 | [🌐 Plain-text page with hard line wraps](#line-wraps) | `exact` | ✅ |
 | [Same text twice, no hint](#duplicate-first) | `exact`, occurrence 1 of 2 | ✅ |
 | [Same text twice, picked with prefix](#duplicate-prefix) | `exact`, occurrence 2 of 2 | ✅ |
+| [Quote spans lines split by <br>](#line-breaks) | `exact` | ✅ |
+| [Repeated text next to a <br>](#line-breaks-pinned) | `exact`, occurrence 1 of 2 | ✅ |
 | [Very long quote](#long-quote) | `exact` | ✅ |
 | [🌐 Quote contains - and ,](#special-characters) | `exact` | ✅ |
 | [Quote inside a collapsed section](#collapsed-details) | `exact` | ✅ |
@@ -317,6 +319,65 @@ What the skill writes:
 ```
 
 <img src="refs/duplicate-prefix.png" alt="Same text twice, picked with prefix" width="720">
+
+<a id="line-breaks"></a>
+### Quote spans lines split by <br>
+
+Fact boxes often put each line in one paragraph separated by <br>. The lines count as separate, so the quote reads with a space between them, and the link uses one start and one end piece, each within a single line, because browsers won't match a piece across a line break.
+
+<details><summary>Input</summary>
+
+```json
+{
+  "url": "http://127.0.0.1:4317/facts.html",
+  "quote": "FULL NAME: Ada Example BORN: March 1, 1994",
+  "out": "refs/line-breaks.png"
+}
+```
+
+</details>
+
+**match:** `exact` · **internal:** true
+
+What the skill writes:
+
+```md
+[^line-breaks]: > FULL NAME: Ada Example BORN: March 1, 1994
+    >
+    > — [Ada Example](http://127.0.0.1:4317/facts.html#:~:text=FULL%20NAME%3A%20Ada%20Example,BORN%3A%20March%201%2C%201994) · retrieved 2026-11-08
+    >
+    > ![Quote spans lines split by <br>](refs/line-breaks.png)
+```
+
+<img src="refs/line-breaks.png" alt="Quote spans lines split by <br>" width="720">
+
+<a id="line-breaks-pinned"></a>
+### Repeated text next to a <br>
+
+The date appears twice. The words pinning the link to the first one come from the same line ("BORN:"), never glued across the line break ("Ada ExampleBORN:"), which no browser would match.
+
+<details><summary>Input</summary>
+
+```json
+{
+  "url": "http://127.0.0.1:4317/facts.html",
+  "quote": "March 1, 1994"
+}
+```
+
+</details>
+
+**match:** `exact` · **internal:** true · **occurrence:** 1 of 2
+
+**note:** Quote appears 2 times; matched the first. If you meant another, re-run with prefix/suffix (words just before/after it).
+
+What the skill writes:
+
+```md
+[^line-breaks-pinned]: > March 1, 1994
+    >
+    > — [Ada Example](http://127.0.0.1:4317/facts.html#:~:text=BORN%3A-,March%201%2C%201994) · retrieved 2026-11-08
+```
 
 <a id="long-quote"></a>
 ### Very long quote

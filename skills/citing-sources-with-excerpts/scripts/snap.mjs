@@ -86,10 +86,14 @@ const encFrag = (s) => encodeURIComponent(s).replace(/-/g, '%2D').replace(/,/g, 
 
 // Long quotes, or quotes whose DOM text differs from the clean text (e.g. a [12] footnote marker
 // inside), use the textStart,textEnd form. prefix/suffix pin the right occurrence of repeated text.
-function buildFragmentUrl(base, text, { forceRange = false, prefix = null, suffix = null } = {}) {
+function buildFragmentUrl(base, text, { forceRange = false, prefix = null, suffix = null, lines = null } = {}) {
   const words = text.trim().split(/\s+/);
   let body;
-  if ((text.length > 160 && words.length > 12) || (forceRange && words.length >= 4)) {
+  if (lines && lines.length > 1) {
+    // Spans several lines: start = opening words of the first line, end = closing words of the last.
+    const first = lines[0].split(' '), last = lines.at(-1).split(' ');
+    body = `${encFrag(first.slice(0, 5).join(' '))},${encFrag(last.slice(-5).join(' '))}`;
+  } else if ((text.length > 160 && words.length > 12) || (forceRange && words.length >= 4)) {
     const n = Math.min(5, Math.floor(words.length / 2));
     body = `${encFrag(words.slice(0, n).join(' '))},${encFrag(words.slice(-n).join(' '))}`;
   } else body = encFrag(text.trim());
@@ -123,8 +127,10 @@ function locateInPage({ start, end, prefix, suffix, includeHidden, allowFuzzy, h
   const nodes = []; // {node, rawStart}
   let raw = '';
   let lastBlock = null;
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
     acceptNode(n) {
+      // <br> has no text but splits lines: browsers' text-fragment matching won't cross it either.
+      if (n.nodeType === Node.ELEMENT_NODE) return n.tagName === 'BR' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
       const p = n.parentElement;
       if (!p || !n.nodeValue) return NodeFilter.FILTER_REJECT;
       for (let e = p; e; e = e.parentElement) if (SKIP.has(e.tagName.toUpperCase())) return NodeFilter.FILTER_REJECT;
@@ -134,9 +140,10 @@ function locateInPage({ start, end, prefix, suffix, includeHidden, allowFuzzy, h
     },
   });
   for (let n; (n = walker.nextNode()); ) {
+    if (n.nodeType === Node.ELEMENT_NODE) { if (raw && !raw.endsWith('\u2029')) raw += '\u2029'; continue; }
     const b = blockOf(n.parentElement);
     // U+2029 marks block boundaries; literal newlines inside a text node are just wrapping.
-    if (lastBlock && b !== lastBlock) raw += '\u2029';
+    if (lastBlock && b !== lastBlock && !raw.endsWith('\u2029')) raw += '\u2029';
     lastBlock = b;
     nodes.push({ node: n, rawStart: raw.length });
     raw += n.nodeValue;
@@ -337,6 +344,9 @@ function locateInPage({ start, end, prefix, suffix, includeHidden, allowFuzzy, h
   const quoteOnPage = raw.slice(hit.rawStart, hit.rawEnd).replace(/\s+/g, ' ').trim();
   const flatWs = (s) => s.replace(/\s+/g, ' ').trim();
   const domDiffers = flatWs(range.toString()) !== quoteOnPage;
+  // A text-fragment term can't cross a line/block boundary, so a match that spans lines is linked
+  // with start,end terms taken from its first and last line.
+  const lines = raw.slice(hit.rawStart, hit.rawEnd).split('\u2029').map(flatWs).filter(Boolean);
   const lastWords = (s, n) => s.split('\u2029').pop().trim().split(/\s+/).filter(Boolean).slice(-n).join(' ');
   const firstWords = (s, n) => s.split('\u2029')[0].trim().split(/\s+/).filter(Boolean).slice(0, n).join(' ');
 
@@ -365,6 +375,7 @@ function locateInPage({ start, end, prefix, suffix, includeHidden, allowFuzzy, h
     contextMissed,
     quoteOnPage,
     domDiffers,
+    lines,
     before: lastWords(raw.slice(Math.max(0, hit.rawStart - 120), hit.rawStart), 3),
     after: firstWords(raw.slice(hit.rawEnd, hit.rawEnd + 120), 3),
     excerpt,
@@ -641,6 +652,7 @@ async function snapGroup(browser, base, items, timeout) {
       const pin = found.occurrences > 1;
       result.fragment_url = buildFragmentUrl(base, found.quoteOnPage, {
         forceRange: found.domDiffers,
+        lines: found.lines,
         prefix: pin ? found.before || null : null,
         suffix: pin ? found.after || null : null,
       });
