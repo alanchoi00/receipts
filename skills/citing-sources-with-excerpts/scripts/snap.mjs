@@ -12,7 +12,7 @@
 // Single mode prints one JSON object; batch prints an array in input order.
 // Exit 0 = all found, 1 = some not found, 2 = some error.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { lookup } from 'node:dns/promises';
 import { BlockList, isIP } from 'node:net';
 import { chromium } from 'playwright';
@@ -340,7 +340,10 @@ function locateInPage({ start, end, prefix, suffix, includeHidden, allowFuzzy, h
     // The document is never shorter than the window; the body's own box is where content ends.
     const body = document.body.getBoundingClientRect();
     const contentH = Math.ceil(body.bottom + scrollY + (parseFloat(getComputedStyle(document.body).marginBottom) || 0));
-    return { q, b, sec, lines, docH: Math.min(document.documentElement.scrollHeight, Math.max(contentH, q.y + q.height + 16)), docW: document.documentElement.scrollWidth };
+    // Pages that rebuild their DOM after load (e.g. widgets replacing server-rendered HTML) detach
+    // the stored range: it then measures 0x0 and must be located again.
+    const live = s.range.startContainer.isConnected && q.width > 0 && q.height > 0;
+    return { live, q, b, sec, lines, docH: Math.min(document.documentElement.scrollHeight, Math.max(contentH, q.y + q.height + 16)), docW: document.documentElement.scrollWidth };
   };
 
   const quoteOnPage = raw.slice(hit.rawStart, hit.rawEnd).replace(/\s+/g, ' ').trim();
@@ -546,18 +549,25 @@ function captureExclusive(page, opts) {
 
 // Late-loading content (images, fonts, injected banners) keeps reflowing long pages after `load`.
 // Poll until the quote stops moving, shoot, and re-shoot if it moved during the capture.
-async function screenshotStable(page, out, shot) {
-  const same = (a, b) => Math.abs(a.q.y - b.q.y) < 1 && Math.abs(a.b.height - b.b.height) < 1;
+// Returns false (and writes nothing) if no usable crop exists, e.g. the passage keeps vanishing.
+async function screenshotStable(page, out, shot, relocate) {
+  const same = (a, b) => a.live && b.live && Math.abs(a.q.y - b.q.y) < 1 && Math.abs(a.b.height - b.b.height) < 1;
   const { width: vw, height: vh } = page.viewportSize();
   const deadline = Date.now() + 6000;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  const fresh = async () => {
     let m = await page.evaluate(measure);
+    if (!m.live) { await relocate(); m = await page.evaluate(measure); }
+    return m;
+  };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let m = await fresh();
     while (Date.now() < deadline) {
       await page.waitForTimeout(300);
-      const cur = await page.evaluate(measure);
+      const cur = await fresh();
       if (same(m, cur)) break;
       m = cur;
     }
+    if (!m.live) continue;
     // Capture from the viewport, not fullPage: fullPage resizes the window to the whole document
     // (~20k px on Wikipedia), which triggers lazy loading and intermittently stalls rendering.
     // Center the clip so sticky headers don't cover it.
@@ -569,10 +579,14 @@ async function screenshotStable(page, out, shot) {
     const full = c.width >= vw - 1;
     const x0 = full ? 0 : Math.max(0, c.x - sx), y0 = Math.max(0, c.y - sy);
     const x1 = full ? vw : Math.min(vw, c.x - sx + c.width), y1 = Math.min(vh, c.y - sy + c.height);
+    // Never save a sliver: a crop smaller than one short line of text means the geometry is wrong.
+    if (x1 - x0 < 40 || y1 - y0 < 12) continue;
     const before = await page.evaluate(measure); // scrolling can shift lazy content; re-check below
-    await captureExclusive(page, { path: out, clip: { x: x0, y: y0, width: Math.max(1, x1 - x0), height: Math.max(1, y1 - y0) } });
-    if (same(before, await page.evaluate(measure))) return;
+    await captureExclusive(page, { path: out, clip: { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } });
+    if (same(before, await page.evaluate(measure))) return true;
   }
+  rmSync(out, { force: true });
+  return false;
 }
 
 // ---------- running ----------
@@ -691,9 +705,10 @@ async function snapGroup(browser, base, items, timeout) {
       if (internal) result.internal = true;
       if (it.out && !found.hidden) {
         // Re-locate so window.__citeMeasure points at this quote (several quotes may share a page).
-        await page.evaluate(locateInPage, { ...base_, ...used });
-        await screenshotStable(page, it.out, it.shot);
-        result.screenshot = it.out;
+        const relocate = () => page.evaluate(locateInPage, { ...base_, ...used });
+        await relocate();
+        if (await screenshotStable(page, it.out, it.shot, relocate)) result.screenshot = it.out;
+        else notes.push('No screenshot: the page kept rebuilding or moving this passage, so no reliable crop was possible. The quote itself is verified.');
       }
       if (notes.length) result.note = notes.join(' ');
       it.result = result;

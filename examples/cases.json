@@ -345,6 +345,14 @@
       "expect": { "ok": true, "note": "no dark mode", "screenshot": true }
     },
     {
+      "id": "rebuilt-dom",
+      "group": "screenshots",
+      "title": "Page rebuilds the passage after loading",
+      "why": "Some sites (Wikimedia Commons, for one) swap server-rendered HTML for JavaScript widgets after load, replacing the nodes the quote was found in. The screenshot re-finds the quote instead of cropping to the old, now-empty spot, which used to produce a blank sliver.",
+      "cite": { "url": "{{base}}/rebuilt.html", "quote": "Female polar bear near Kaktovik, Barter Island, Alaska.", "out": true },
+      "expect": { "ok": true, "match": "exact", "screenshot": true }
+    },
+    {
       "id": "wide-table", "group": "screenshots",
       "title": "Quote in a wide table",
       "why": "Frames the whole row so the value keeps its context. The table is wider than the window, so the crop centers horizontally on the quote.",

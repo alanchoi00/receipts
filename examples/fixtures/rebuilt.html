@@ -1,0 +1,12 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Media file</title><link rel="stylesheet" href="_style.css"></head><body><main>
+<h1>Media file</h1>
+<h2>Captions</h2>
+<div id="caption"><p>Female polar bear near Kaktovik, Barter Island, Alaska.</p></div>
+<p>Like many wikis, this page replaces its server-rendered widgets with JavaScript ones after loading.</p>
+<script>
+// Rebuild the caption's DOM (same text, new nodes) every 100 ms for 2 s, like a widget "infusing".
+const box = document.getElementById('caption');
+const timer = setInterval(() => { box.innerHTML = '<p>Female polar bear near Kaktovik, Barter Island, Alaska.</p>'; }, 100);
+setTimeout(() => clearInterval(timer), 2000);
+</script>
+</main></body></html>

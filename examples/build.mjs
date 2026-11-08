@@ -62,6 +62,12 @@ function verify(result, expect) {
       if (!has(field, v)) fails.push(`${field} should contain ${JSON.stringify(v)} (got ${JSON.stringify(result[field] ?? null)})`);
     } else if (k === 'screenshot') {
       if (Boolean(result.screenshot) !== v) fails.push(v ? 'expected a screenshot' : 'expected no screenshot');
+      else if (v) {
+        // PNG header: width and height are big-endian at bytes 16-23. Reject slivers (2x scale -> px/2).
+        const png = readFileSync(result.screenshot);
+        const w = png.readUInt32BE(16), h = png.readUInt32BE(20);
+        if (w < 80 || h < 24) fails.push(`screenshot is a ${w}x${h} sliver, not a usable crop`);
+      }
     } else if ((result[k] ?? (k === 'hidden' || k === 'internal' ? false : null)) !== v) {
       fails.push(`${k} should be ${JSON.stringify(v)} (got ${JSON.stringify(result[k] ?? null)})`);
     }

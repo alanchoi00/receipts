@@ -10,7 +10,7 @@ node examples/build.mjs --check    # smoke test: verify only, write nothing
 node examples/build.mjs --offline  # skip the 🌐 cases
 ```
 
-Last run: 2026-11-08 · 48/48 cases pass.
+Last run: 2026-11-08 · 49/49 cases pass.
 
 ## Finding the quote
 
@@ -880,6 +880,7 @@ What the skill writes:
 | [frame: section on a page without headings](#section-no-heading) |  | ✅ |
 | [frame: viewport on a very short page](#viewport-short-page) |  | ✅ |
 | [theme: dark on a site without dark mode](#dark-unsupported) |  | ✅ |
+| [Page rebuilds the passage after loading](#rebuilt-dom) |  | ✅ |
 | [Quote in a wide table](#wide-table) |  | ✅ |
 | [🌐 Page that keeps shifting while loading](#tall-block-shift) |  | ✅ |
 
@@ -1213,8 +1214,6 @@ Prompt wording: "dark mode screenshots"
 
 **match:** `exact` · **internal:** true · **link:** highlights the quote in Chromium
 
-**note:** Page has no dark mode; the screenshot uses its light theme.
-
 What the skill writes:
 
 ```md
@@ -1361,6 +1360,37 @@ What the skill writes:
 ```
 
 <img src="refs/dark-unsupported.png" alt="theme: dark on a site without dark mode" width="720">
+
+<a id="rebuilt-dom"></a>
+### Page rebuilds the passage after loading
+
+Some sites (Wikimedia Commons, for one) swap server-rendered HTML for JavaScript widgets after load, replacing the nodes the quote was found in. The screenshot re-finds the quote instead of cropping to the old, now-empty spot, which used to produce a blank sliver.
+
+<details><summary>Input</summary>
+
+```json
+{
+  "url": "http://127.0.0.1:4317/rebuilt.html",
+  "quote": "Female polar bear near Kaktovik, Barter Island, Alaska.",
+  "out": "refs/rebuilt-dom.png"
+}
+```
+
+</details>
+
+**match:** `exact` · **internal:** true · **link:** highlights the quote in Chromium
+
+What the skill writes:
+
+```md
+[^rebuilt-dom]: > Female polar bear near Kaktovik, Barter Island, Alaska.
+    >
+    > — [Media file — Captions](http://127.0.0.1:4317/rebuilt.html#:~:text=Female%20polar%20bear%20near%20Kaktovik%2C%20Barter%20Island%2C%20Alaska.) · retrieved 2026-11-08
+    >
+    > ![Page rebuilds the passage after loading](refs/rebuilt-dom.png)
+```
+
+<img src="refs/rebuilt-dom.png" alt="Page rebuilds the passage after loading" width="720">
 
 <a id="wide-table"></a>
 ### Quote in a wide table
