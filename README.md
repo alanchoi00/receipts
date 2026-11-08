@@ -78,3 +78,7 @@ node examples/build.mjs --offline  # skip cases that need live websites
 - Pages behind a login or paywall fail and get marked UNVERIFIED.
 - A citation is a snapshot from the `retrieved` date. Nothing re-checks it later.
 - Text-fragment highlighting works in current Chrome, Edge, Safari and Firefox. Older browsers just open the page.
+
+## License
+
+[MIT](LICENSE)
