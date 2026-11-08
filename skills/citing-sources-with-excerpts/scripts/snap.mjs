@@ -11,6 +11,8 @@
 // Exit 0 = all found, 1 = some not found, 2 = some error.
 
 import { readFileSync } from 'node:fs';
+import { lookup } from 'node:dns/promises';
+import { BlockList, isIP } from 'node:net';
 import { chromium } from 'playwright';
 
 function parseArgs(argv) {
@@ -219,16 +221,55 @@ function locateInPage({ start, end }) {
 const CONCURRENCY = 4;
 const SLOW_TYPES = new Set(['image', 'font', 'media']);
 
-// Only web pages may be cited: no file://, chrome://, etc. (a prompt-injected "citation" must not
-// read local files). Cloud metadata endpoints are blocked too. localhost/private networks stay
-// allowed on purpose: internal docs on a VPN are a core use case.
-const BLOCKED_HOSTS = /^(169\.254\.\d+\.\d+|\[fe80:[0-9a-f:]*\]|metadata\.google\.internal|metadata)$/i;
+// URL policy. Defense in depth, not a sandbox: whoever runs this can already reach any host
+// from their shell. It stops accidents and prompt-injected "citations".
+// - Only http/https pages can be cited (no file://, chrome://): local files must never be quoted.
+// - Cloud metadata / link-local addresses are blocked: by literal host for every request, and by
+//   resolved IP for navigations (the only responses whose content we read; subresource responses
+//   never reach our output, and CORS keeps page scripts from reading metadata responses).
+//   Residual risk, accepted: DNS rebinding between our lookup and the browser's fetch.
+// - localhost/private networks stay allowed on purpose: internal docs on a VPN are a core use case.
+const METADATA = new BlockList();
+METADATA.addSubnet('169.254.0.0', 16, 'ipv4'); // AWS/GCP/Azure IMDS + link-local
+METADATA.addAddress('100.100.100.200', 'ipv4'); // Alibaba Cloud
+METADATA.addSubnet('fe80::', 10, 'ipv6');
+METADATA.addAddress('fd00:ec2::254', 'ipv6'); // AWS IMDS over IPv6
+const METADATA_NAMES = new Set(['metadata', 'metadata.google.internal', 'instance-data', 'instance-data.ec2.internal']);
+
+function blockedIp(ip) {
+  // IPv4-mapped IPv6, dotted (::ffff:169.254.169.254) or hex (::ffff:a9fe:a9fe, as URL() normalizes it)
+  let m = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+  if (m) ip = m[1];
+  else if ((m = ip.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i))) {
+    const [hi, lo] = [parseInt(m[1], 16), parseInt(m[2], 16)];
+    ip = [hi >> 8, hi & 255, lo >> 8, lo & 255].join('.');
+  }
+  const v = isIP(ip);
+  return v ? METADATA.check(ip, v === 4 ? 'ipv4' : 'ipv6') : false;
+}
+const hostOf = (u) => u.hostname.replace(/^\[|\]$/g, '').replace(/\.$/, '').toLowerCase();
+
 function urlProblem(raw, { subresource = false } = {}) {
   let u;
   try { u = new URL(raw); } catch { return 'Invalid URL'; }
   const okSchemes = subresource ? ['http:', 'https:', 'data:', 'blob:'] : ['http:', 'https:'];
   if (!okSchemes.includes(u.protocol)) return `Blocked URL scheme ${u.protocol} (only http/https pages can be cited)`;
-  if (BLOCKED_HOSTS.test(u.hostname)) return `Blocked host ${u.hostname} (cloud metadata / link-local)`;
+  if (u.protocol === 'data:' || u.protocol === 'blob:') return null;
+  const host = hostOf(u);
+  if (METADATA_NAMES.has(host) || blockedIp(host)) return `Blocked host ${host} (cloud metadata / link-local)`;
+  return null;
+}
+
+// Navigations also check what the hostname resolves to (catches DNS names aliasing metadata IPs).
+async function navProblem(raw) {
+  const problem = urlProblem(raw);
+  if (problem) return problem;
+  const host = hostOf(new URL(raw));
+  if (isIP(host)) return null;
+  try {
+    const bad = (await lookup(host, { all: true })).find((a) => blockedIp(a.address));
+    if (bad) return `Blocked host ${host} (resolves to ${bad.address}: cloud metadata / link-local)`;
+  } catch { /* unresolvable: let the browser report the DNS error */ }
   return null;
 }
 
@@ -297,21 +338,24 @@ function friendlyError(e, base) {
 // One page load per URL; every quote for that URL is located on the same page.
 async function snapUrl(browser, base, items, timeout) {
   const shots = items.some((it) => it.out);
-  const page = await browser.newPage({ viewport: { width: 1100, height: 900 }, deviceScaleFactor: shots ? 2 : 1 });
+  // Own context per URL: service workers can't bypass routing; popups are closed.
+  const context = await browser.newContext({ viewport: { width: 1100, height: 900 }, deviceScaleFactor: shots ? 2 : 1, serviceWorkers: 'block' });
+  const page = await context.newPage();
+  context.on('page', (p) => { if (p !== page) p.close().catch(() => {}); });
   try {
-    const problem = urlProblem(base);
+    const problem = await navProblem(base);
     if (problem) throw new Error(problem);
-    // Applies to every request, not just the initial URL.
-    await page.route('**/*', async (r) => {
+    await context.route('**/*', async (r) => {
       const req = r.request();
-      if (urlProblem(req.url(), { subresource: !req.isNavigationRequest() })) return r.abort('blockedbyclient');
+      const nav = req.isNavigationRequest();
+      if (nav ? await navProblem(req.url()) : urlProblem(req.url(), { subresource: true })) return r.abort('blockedbyclient');
       if (!shots && SLOW_TYPES.has(req.resourceType())) return r.abort();
-      if (req.isNavigationRequest()) {
+      if (nav) {
         // Route handlers don't see redirect hops, so fetch without following redirects,
         // vet the Location, then hand the 3xx to the browser (its follow-up is routed again).
         const resp = await r.fetch({ maxRedirects: 0 });
         const loc = resp.headers()['location'];
-        if (loc && urlProblem(new URL(loc, req.url()).href)) return r.abort('blockedbyclient');
+        if (loc && (await navProblem(new URL(loc, req.url()).href))) return r.abort('blockedbyclient');
         return r.fulfill({ response: resp });
       }
       return r.continue();
@@ -352,7 +396,7 @@ async function snapUrl(browser, base, items, timeout) {
     const error = friendlyError(e, base);
     for (const it of items) it.result ??= { ok: false, url: base, error };
   } finally {
-    await page.close();
+    await context.close();
   }
 }
 
