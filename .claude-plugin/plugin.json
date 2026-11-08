@@ -1,11 +1,17 @@
 {
   "name": "receipts",
-  "version": "0.1.0",
   "description": "Citations with receipts: every quoted source in your markdown is checked word for word against the live page, linked with a highlight-on-click text fragment, and optionally screenshotted.",
   "author": {
     "name": "alanchoi00"
   },
   "homepage": "https://github.com/alanchoi00/receipts",
-  "keywords": ["citations", "markdown", "specs", "text-fragments", "screenshots", "verification"],
+  "keywords": [
+    "citations",
+    "markdown",
+    "specs",
+    "text-fragments",
+    "screenshots",
+    "verification"
+  ],
   "skills": "./skills/"
 }

@@ -30,6 +30,14 @@ In Claude Code:
 
 The repo is private, so this needs GitHub access to it, for example through `gh auth login`.
 
+### Updates
+
+Every push to `main` is a new version. Claude Code doesn't pull updates for this marketplace on its own until you turn auto-update on: `/plugin` → **Marketplaces** → **receipts** → **Enable auto-update**. Or update by hand:
+
+```text
+/plugin marketplace update receipts
+```
+
 The script needs Node 18+ and Playwright's Chromium. Claude runs this setup the first time it uses the skill, or you can run it yourself from the plugin's skill directory:
 
 ```bash

@@ -8,7 +8,6 @@
     {
       "name": "receipts",
       "description": "Verified, click-to-highlight citations for markdown specs",
-      "version": "0.1.0",
       "source": "./",
       "author": {
         "name": "alanchoi00"
