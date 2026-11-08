@@ -1,0 +1,18 @@
+{
+  "name": "receipts",
+  "description": "Marketplace for the receipts plugin",
+  "owner": {
+    "name": "alanchoi00"
+  },
+  "plugins": [
+    {
+      "name": "receipts",
+      "description": "Verified, click-to-highlight citations for markdown specs",
+      "version": "0.1.0",
+      "source": "./",
+      "author": {
+        "name": "alanchoi00"
+      }
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+# receipts
+
+A Claude Code plugin that makes AI-written specs show their receipts.
+
+When Claude cites a web page, it usually gives you a link and a paraphrase. You then open each link and search for the passage yourself. With this plugin, Claude instead:
+
+- **checks every quote word for word** against the rendered page, using a headless browser rather than a summarizing fetch tool;
+- **links with a [text fragment](https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Fragment/Text_fragments)** (`#:~:text=`), so clicking the link scrolls to the passage and highlights it;
+- **puts the passage in a footnote**, so you can check the claim without clicking at all;
+- **takes a cropped, highlighted screenshot** when you ask for one.
+
+```md
+Clients must not cache rate-limit responses.[^429-cache]
+
+[^429-cache]: > Responses with the 429 status code MUST NOT be stored by a cache.
+    >
+    > — [Additional HTTP Status Codes — 4. 429 Too Many Requests](https://www.rfc-editor.org/rfc/rfc6585.html#:~:text=Responses%20with%20the%20429%20status%20code%20MUST%20NOT%20be%20stored%20by%20a%20cache.) · retrieved 2026-11-08
+```
+
+If a quote isn't on the page word for word, the script finds the closest sentence and Claude uses that text instead. If the page can't be loaded (PDF, login wall), the citation is marked **UNVERIFIED** rather than quoted from memory.
+
+## Install
+
+In Claude Code:
+
+```text
+/plugin marketplace add alanchoi00/receipts
+/plugin install receipts@receipts
+```
+
+The repo is private, so this needs GitHub access to it, for example through `gh auth login`.
+
+The script needs Node 18+ and Playwright's Chromium. Claude runs this setup the first time it uses the skill, or you can run it yourself from the plugin's skill directory:
+
+```bash
+npm install --prefix skills/citing-sources-with-excerpts/scripts
+npx --prefix skills/citing-sources-with-excerpts/scripts playwright install chromium
+```
+
+## Use
+
+Ask Claude to write or edit markdown that cites sources, for example "write a design note on X with references". The `citing-sources-with-excerpts` skill triggers on its own. Ask for screenshots if you want them; they're off by default because they roughly double the run time.
+
+The script also works on its own:
+
+```bash
+# one quote
+node skills/citing-sources-with-excerpts/scripts/snap.mjs "https://en.wikipedia.org/wiki/Justin_Bieber" \
+  --quote "With estimated sales of over 150 million records" --out bieber.png
+
+# many quotes, one browser
+node skills/citing-sources-with-excerpts/scripts/snap.mjs --batch cites.json   # [{"url","quote","out?"}]
+```
+
+It prints JSON with the match type (`exact` / `loose` / `fuzzy` / `none`), the quote as it appears on the page, a text-fragment URL, the surrounding paragraph, the page title and section, and the screenshot path.
+
+## Limits
+
+- HTML pages only. PDFs and file downloads are not supported.
+- Pages behind a login or paywall fail and get marked UNVERIFIED.
+- A citation is a snapshot from the `retrieved` date. Nothing re-checks it later.
+- Text-fragment highlighting works in current Chrome, Edge, Safari and Firefox. Older browsers just open the page.
