@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "receipts",
-      "description": "Verified, click-to-highlight citations for markdown specs",
+      "description": "Verified, click-to-highlight citations for docs and chat answers",
       "source": "./",
       "author": {
         "name": "alanchoi00"

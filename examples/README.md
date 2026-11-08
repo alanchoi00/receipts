@@ -81,7 +81,7 @@ The page uses “curly quotes” and an em dash; the quote uses straight quotes 
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -107,7 +107,7 @@ Page says “rate-limited”, quote says “rate limited”. Still word for word
 
 </details>
 
-**match:** `loose`
+**match:** `loose` · **internal:** true
 
 What the skill writes:
 
@@ -211,7 +211,7 @@ The page has a [1] marker mid-sentence; the quote doesn't. It still matches, and
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -272,7 +272,7 @@ The sentence appears in two sections. Without a hint the script takes the first,
 
 </details>
 
-**match:** `exact` · **occurrence:** 1 of 2
+**match:** `exact` · **internal:** true · **occurrence:** 1 of 2
 
 **note:** Quote appears 2 times; matched the first. If you meant another, re-run with prefix/suffix (words just before/after it).
 
@@ -302,7 +302,7 @@ What the skill writes:
 
 </details>
 
-**match:** `exact` · **occurrence:** 2 of 2
+**match:** `exact` · **internal:** true · **occurrence:** 2 of 2
 
 **note:** Picked occurrence 2 of 2 using prefix/suffix.
 
@@ -334,7 +334,7 @@ Over 160 characters, so the link uses the short start,end form instead of the wh
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -387,7 +387,7 @@ The text is inside a closed <details>. The script finds it, expands the section,
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 **note:** Quote was inside collapsed content; it was expanded for the screenshot.
 
@@ -420,7 +420,7 @@ The text exists but is display:none. It counts as found and is flagged `hidden`;
 
 </details>
 
-**match:** `exact` · **hidden:** true
+**match:** `exact` · **internal:** true · **hidden:** true
 
 **note:** Quote is in hidden content (e.g. an inactive tab): no screenshot possible, and the link may not highlight it.
 
@@ -448,7 +448,7 @@ The page fetches its content 1.2 s after loading. The script waits for the netwo
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -475,7 +475,7 @@ No spaces between words; matching still works.
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -505,7 +505,7 @@ Emoji are kept and encoded in the link.
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -616,7 +616,7 @@ Moved pages are followed.
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -758,7 +758,7 @@ The NAT64 form of 169.254.169.254.
 <a id="metadata-redirect"></a>
 ### Redirect to the metadata address
 
-Each redirect is checked before the browser follows it.
+Each redirect is checked before the browser follows it, and the error names the real reason.
 
 <details><summary>Input</summary>
 
@@ -771,12 +771,12 @@ Each redirect is checked before the browser follows it.
 
 </details>
 
-**error:** page.goto: net::ERR_BLOCKED_BY_CLIENT at http://127.0.0.1:4317/redirect-metadata
+**error:** Blocked host 169.254.169.254 (cloud metadata / link-local) (reached via redirect from http://127.0.0.1:4317/redirect-metadata)
 
 <a id="localhost"></a>
 ### localhost is allowed
 
-On purpose: internal docs on your network are a core use case. (Every fixture page here is served from localhost.)
+On purpose: internal docs on your network are a core use case. The result is flagged `internal`, so Claude treats the content as possibly confidential and quotes only what the claim needs. Every fixture page here is served from localhost.
 
 <details><summary>Input</summary>
 
@@ -789,7 +789,7 @@ On purpose: internal docs on your network are a core use case. (Every fixture pa
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -839,7 +839,7 @@ Prompt wording: (no wording needed)
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -873,7 +873,7 @@ Prompt wording: "tight screenshots"
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -907,7 +907,7 @@ Prompt wording: "show the whole section"
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -942,7 +942,7 @@ Prompt wording: "full-screen screenshots"
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -977,7 +977,7 @@ Prompt wording: "include a couple of lines around it"
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -1011,7 +1011,7 @@ Prompt wording: "mobile-sized screenshots"
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -1046,7 +1046,7 @@ Prompt wording: "keep them short"
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -1080,7 +1080,7 @@ Prompt wording: "highlight in yellow"
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -1114,7 +1114,7 @@ Prompt wording: "no highlight"
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -1148,7 +1148,7 @@ Prompt wording: "dark mode screenshots"
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -1182,7 +1182,7 @@ Prompt wording: "smaller images"
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -1214,7 +1214,7 @@ Falls back to the paragraph and says so.
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 **note:** No heading above the quote; used the paragraph frame.
 
@@ -1249,7 +1249,7 @@ The page is shorter than the window; the capture stops at the page's end.
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 
@@ -1281,7 +1281,7 @@ Pages can't be forced dark; the screenshot stays light and the result says so.
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 **note:** Page has no dark mode; the screenshot uses its light theme.
 
@@ -1314,7 +1314,7 @@ Frames the whole row so the value keeps its context. The table is wider than the
 
 </details>
 
-**match:** `exact`
+**match:** `exact` · **internal:** true
 
 What the skill writes:
 

@@ -1,6 +1,6 @@
 {
   "name": "receipts",
-  "description": "Citations with receipts: every quoted source in your markdown is checked word for word against the live page, linked with a highlight-on-click text fragment, and optionally screenshotted.",
+  "description": "Citations with receipts: every quoted source, in a markdown file or a chat answer, is checked word for word against the live page, linked with a highlight-on-click text fragment, and optionally screenshotted.",
   "author": {
     "name": "alanchoi00"
   },

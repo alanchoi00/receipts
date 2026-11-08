@@ -11,7 +11,7 @@
       "title": "Exact quote",
       "why": "The common case. Also shows the crop skipping the floating infobox next to the paragraph.",
       "cite": { "url": "https://en.wikipedia.org/wiki/Justin_Bieber", "quote": "With estimated sales of over 150 million records", "out": true },
-      "expect": { "ok": true, "match": "exact", "screenshot": true }
+      "expect": { "ok": true, "match": "exact", "internal": false, "screenshot": true }
     },
     {
       "id": "punctuation-normalized", "group": "matching",
@@ -207,16 +207,16 @@
     {
       "id": "metadata-redirect", "group": "security",
       "title": "Redirect to the metadata address",
-      "why": "Each redirect is checked before the browser follows it.",
+      "why": "Each redirect is checked before the browser follows it, and the error names the real reason.",
       "cite": { "url": "{{base}}/redirect-metadata", "quote": "ami-id" },
-      "expect": { "ok": false, "error": "ERR_BLOCKED_BY_CLIENT" }
+      "expect": { "ok": false, "error": "Blocked host 169.254.169.254" }
     },
     {
       "id": "localhost", "group": "security",
       "title": "localhost is allowed",
-      "why": "On purpose: internal docs on your network are a core use case. (Every fixture page here is served from localhost.)",
+      "why": "On purpose: internal docs on your network are a core use case. The result is flagged `internal`, so Claude treats the content as possibly confidential and quotes only what the claim needs. Every fixture page here is served from localhost.",
       "cite": { "url": "{{base}}/article.html", "quote": "When a client exceeds its budget" },
-      "expect": { "ok": true, "match": "exact" }
+      "expect": { "ok": true, "match": "exact", "internal": true }
     },
 
     {

@@ -58,7 +58,7 @@ function verify(result, expect) {
       if (!has(field, v)) fails.push(`${field} should contain ${JSON.stringify(v)} (got ${JSON.stringify(result[field] ?? null)})`);
     } else if (k === 'screenshot') {
       if (Boolean(result.screenshot) !== v) fails.push(v ? 'expected a screenshot' : 'expected no screenshot');
-    } else if ((result[k] ?? (k === 'hidden' ? false : null)) !== v) {
+    } else if ((result[k] ?? (k === 'hidden' || k === 'internal' ? false : null)) !== v) {
       fails.push(`${k} should be ${JSON.stringify(v)} (got ${JSON.stringify(result[k] ?? null)})`);
     }
   }
@@ -115,6 +115,7 @@ function readme(data, rows) {
       out.push('<details><summary>Input</summary>', '', code('json', shownInput(c)), '', '</details>', '');
       if (r.ok) {
         const bits = [`**match:** \`${r.match}\``];
+        if (r.internal) bits.push('**internal:** true');
         if (r.occurrences) bits.push(`**occurrence:** ${r.occurrence} of ${r.occurrences}`);
         if (r.hidden) bits.push('**hidden:** true');
         out.push(bits.join(' · '), '');

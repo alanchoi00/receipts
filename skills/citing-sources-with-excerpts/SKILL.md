@@ -1,13 +1,13 @@
 ---
 name: citing-sources-with-excerpts
-description: Use when writing or editing markdown (specs, design notes, RFCs, READMEs, research answers) that cites web pages as evidence, or when a reader needs to check what a linked source actually says without opening it.
+description: Use when citing web pages as evidence, either in a markdown file (specs, design notes, RFCs, READMEs) or in a chat answer where the user asks for sources, references, citations, quotes, or proof they can check, or when a reader needs to see what a linked source actually says without opening it.
 ---
 
 # Citing Sources with Excerpts
 
 ## Overview
 
-Every cited claim carries its proof inline: the verbatim passage, a link that jumps to and highlights that passage, and optionally a screenshot. Readers verify without clicking; clicking lands exactly on the text.
+Every cited claim carries its proof inline: the verbatim passage, a link that jumps to and highlights that passage, and optionally a screenshot. Readers verify without clicking; clicking lands exactly on the text. Works for markdown files and for answers in chat.
 
 **Every quote must come from `snap.mjs` output, never from memory or a summarizing fetch tool.** WebFetch-style tools paraphrase pages; only the script checks the rendered text verbatim.
 
@@ -21,7 +21,7 @@ npm install --prefix <skill-dir>/scripts && npx --prefix <skill-dir>/scripts pla
 
 ## The script
 
-Draft the doc first, collect every citation, then verify them **all in one batch call**:
+Draft the doc or answer first, collect every citation, then verify them **all in one batch call**:
 
 ```bash
 node <skill-dir>/scripts/snap.mjs --batch - <<'EOF'
@@ -44,6 +44,7 @@ One browser for the batch; quotes on the same URL share a page load. Use absolut
 | `occurrences` / `occurrence` | Present when the quote appears more than once. Check `excerpt` is the one you meant; if not, re-run with `prefix`/`suffix` (the words just before/after it on the page). |
 | `hidden` | Quote is in content the page hides (e.g. an inactive tab): verified, but no screenshot. |
 | `note` | Anything else worth knowing (fuzzy match, expanded collapsed section, frame fallback). Read it. |
+| `internal` | The page is on an internal network. Its content may be confidential; don't quote more than the claim needs. |
 
 Exit 0 = all found, 1 = some not found, 2 = some errored (PDF, 4xx, login wall, bot check, timeout). Expect one follow-up batch: put every entry that needs another pass (failed, fuzzy, wrong occurrence, or a longer passage wanted) into it together.
 
@@ -67,7 +68,9 @@ These only shape screenshots. Context wanted in the text itself (or with no scre
 
 ## Output format
 
-Claim in the prose, footnote with the proof:
+Pick the format by where the text goes.
+
+**Markdown file:** claim in the prose, footnote with the proof:
 
 ```md
 Clients should not cache rate-limit responses.[^429-cache]
@@ -80,9 +83,23 @@ Clients should not cache rate-limit responses.[^429-cache]
 ```
 
 - Footnote IDs are short descriptive slugs, not numbers. Reuse the same `[^id]` when the same passage backs two claims.
-- Your own reasoning or recommendation gets no footnote; say in the prose that it is the team's reasoning, not the source's. A factual claim about the outside world (how libraries, browsers, or standards behave) needs a citation or must be phrased as the team's expectation.
-- Screenshots are **opt-in** (they roughly double run time). Add `"out"` only when the user asks for screenshots, or the evidence is visual (a table, figure, code layout) where the text alone loses meaning. Include the image line only for entries with `screenshot` in the result.
 - Save screenshots to `refs/` next to the markdown file; filename = footnote slug. Delete PNGs for citations you dropped.
+
+**Chat answer:** no footnotes (terminals show them as raw text). Put the proof directly under the claim it supports:
+
+```md
+Clients should not cache rate-limit responses:
+
+> Responses with the 429 status code MUST NOT be stored by a cache.
+> — [Additional HTTP Status Codes — 4. 429 Too Many Requests](https://www.rfc-editor.org/rfc/rfc6585.html#:~:text=Responses%20with%20the%20429%20status%20code%20MUST%20NOT%20be%20stored%20by%20a%20cache.)
+```
+
+- No `retrieved` date (the answer is the retrieval).
+- Chat can't show images. If the user asks for screenshots, save them under the system temp directory (e.g. `$TMPDIR/receipts/<slug>.png`), never into the user's project, and give each one's full absolute path on its own line after the quote.
+
+**Both:**
+- Your own reasoning or recommendation gets no quote; say it is your (or the team's) reasoning, not the source's. A factual claim about the outside world (how libraries, browsers, or standards behave) needs a citation or must be phrased as an expectation.
+- Screenshots are **opt-in** (they roughly double run time). Add `"out"` only when the user asks for screenshots, or, in a markdown file, the evidence is visual (a table, figure, code layout) where the text alone loses meaning. Include an image or path only for entries with `screenshot` in the result.
 - Quote the shortest passage that fully supports the claim (one sentence is typical).
 
 ## When the script fails
@@ -90,7 +107,7 @@ Clients should not cache rate-limit responses.[^429-cache]
 | Result | Do |
 |---|---|
 | `match: fuzzy` | Use `quote_on_page` (the screenshot already highlights it). If it no longer supports your claim, change the claim. |
-| `match: none` | Search the page another way (different passage, different section URL). Still none → drop the claim or mark it `**UNVERIFIED:**` with a plain link. Never keep an unverified quote in a blockquote. |
+| `match: none` | Search the page another way (different passage, different section URL). Still none → drop the claim or mark it `**UNVERIFIED:**` with a plain link. Never present an unverified quote as a blockquote. |
 | `ok: false` + error (PDF, login wall, bot check, 403) | Plain link + `**UNVERIFIED (could not load: <error>)**`. Do not fabricate the quote from memory or WebFetch. |
 | `occurrences` > 1 and `excerpt` is the wrong one | Re-run with `"prefix"` or `"suffix"` set to the neighbouring words of the one you meant. |
 

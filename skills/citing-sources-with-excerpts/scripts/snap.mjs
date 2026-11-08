@@ -419,16 +419,36 @@ function urlProblem(raw, { subresource = false } = {}) {
   return null;
 }
 
-// Navigations also check what the hostname resolves to (catches DNS names aliasing metadata IPs).
+async function resolveHost(host) {
+  if (isIP(host)) return [host];
+  try { return (await lookup(host, { all: true })).map((a) => a.address); } catch { return []; } // unresolvable: the browser reports it
+}
+
+// ---------- internal hosts ----------
+
+// Internal = private/loopback address or an intranet-style name. Results from internal pages are
+// flagged so the agent can treat their content as possibly confidential.
+const PRIVATE = new BlockList();
+for (const [net, bits] of [['10.0.0.0', 8], ['172.16.0.0', 12], ['192.168.0.0', 16], ['127.0.0.0', 8], ['100.64.0.0', 10]]) {
+  PRIVATE.addSubnet(net, bits, 'ipv4');
+  PRIVATE.addSubnet(`::ffff:${net}`, 96 + bits, 'ipv6');
+}
+PRIVATE.addAddress('::1', 'ipv6');
+PRIVATE.addSubnet('fc00::', 7, 'ipv6');
+const INTRANET_SUFFIXES = ['.local', '.internal', '.intranet', '.corp', '.lan', '.home.arpa', '.localhost'];
+function isInternal(host, ips) {
+  if (host === 'localhost' || (!isIP(host) && !host.includes('.')) || INTRANET_SUFFIXES.some((s) => host.endsWith(s))) return true;
+  return ips.some((ip) => { const f = isIP(ip); return !!f && PRIVATE.check(ip, f === 4 ? 'ipv4' : 'ipv6'); });
+}
+
+// Every page navigation (first URL and each redirect hop): URL rules plus a resolved-IP metadata check.
 async function navProblem(raw) {
   const problem = urlProblem(raw);
   if (problem) return problem;
   const host = hostOf(new URL(raw));
-  if (isIP(host)) return null;
-  try {
-    const bad = (await lookup(host, { all: true })).find((a) => blockedIp(a.address));
-    if (bad) return `Blocked host ${host} (resolves to ${bad.address}: cloud metadata / link-local)`;
-  } catch { /* unresolvable: let the browser report the DNS error */ }
+  const ips = await resolveHost(host);
+  const bad = !isIP(host) && ips.find(blockedIp);
+  if (bad) return `Blocked host ${host} (resolves to ${bad}: cloud metadata / link-local)`;
   return null;
 }
 
@@ -536,9 +556,10 @@ async function screenshotStable(page, out, shot) {
 
 // ---------- running ----------
 
-function friendlyError(e, base) {
+function friendlyError(e, base, blockedBy) {
   let error = String(e.message || e).split('\n')[0];
-  if (/Download is starting/.test(error) || /\.pdf($|\?)/i.test(base)) error = 'Not an HTML page (PDF or file download) - not supported; cite with a manual excerpt';
+  if (blockedBy && /ERR_BLOCKED_BY_CLIENT/.test(error)) error = `${blockedBy} (reached via redirect from ${base})`;
+  else if (/Download is starting/.test(error) || /\.pdf($|\?)/i.test(base)) error = 'Not an HTML page (PDF or file download) - not supported; cite with a manual excerpt';
   return error;
 }
 
@@ -553,13 +574,16 @@ async function snapGroup(browser, base, items, timeout) {
   });
   const page = await context.newPage();
   context.on('page', (p) => { if (p !== page) p.close().catch(() => {}); });
+  let blockedBy = null; // why a navigation was refused, for a readable error instead of ERR_BLOCKED_BY_CLIENT
+  const refuse = (r, why) => { blockedBy ??= why; return r.abort('blockedbyclient'); };
   try {
     const problem = await navProblem(base);
     if (problem) throw new Error(problem);
     await context.route('**/*', async (r) => {
       const req = r.request();
       const nav = req.isNavigationRequest();
-      if (nav ? await navProblem(req.url()) : urlProblem(req.url(), { subresource: true })) return r.abort('blockedbyclient');
+      const why = nav ? await navProblem(req.url()) : urlProblem(req.url(), { subresource: true });
+      if (why) return nav ? refuse(r, why) : r.abort('blockedbyclient');
       if (!shots && SLOW_TYPES.has(req.resourceType())) return r.abort();
       if (!nav) return r.continue();
       // Route handlers don't see redirect hops, so fetch without following redirects,
@@ -572,13 +596,17 @@ async function snapGroup(browser, base, items, timeout) {
         return r.abort(reason).catch(() => {});
       }
       const loc = resp.headers()['location'];
-      if (loc && (await navProblem(new URL(loc, req.url()).href))) return r.abort('blockedbyclient');
+      const locWhy = loc && (await navProblem(new URL(loc, req.url()).href));
+      if (locWhy) return refuse(r, locWhy);
       return r.fulfill({ response: resp }).catch(() => {});
     });
     const resp = await page.goto(base, { waitUntil: 'domcontentloaded', timeout });
     const ctype = resp?.headers()['content-type'] || '';
     if (!ctype.includes('html')) throw new Error(`Unsupported content-type: ${ctype || 'unknown'}`);
     if (resp && resp.status() >= 400) throw new Error(`HTTP ${resp.status()}`);
+    // Classify where we actually landed (after redirects).
+    const finalHost = hostOf(new URL(page.url()));
+    const internal = isInternal(finalHost, await resolveHost(finalHost));
 
     const retrieved = new Date().toISOString().slice(0, 10);
     let waited = false;
@@ -634,6 +662,7 @@ async function snapGroup(browser, base, items, timeout) {
       }
       if (it.out && it.shot.frame === 'section' && !found.section) notes.push('No heading above the quote; used the paragraph frame.');
       if (it.out && it.shot.theme === 'dark' && !found.darkPage) notes.push('Page has no dark mode; the screenshot uses its light theme.');
+      if (internal) result.internal = true;
       if (it.out && !found.hidden) {
         // Re-locate so window.__citeMeasure points at this quote (several quotes may share a page).
         await page.evaluate(locateInPage, { ...base_, ...used });
@@ -644,7 +673,7 @@ async function snapGroup(browser, base, items, timeout) {
       it.result = result;
     }
   } catch (e) {
-    const error = friendlyError(e, base);
+    const error = friendlyError(e, base, blockedBy);
     for (const it of items) it.result ??= { ok: false, url: base, error };
   } finally {
     await context.close();
