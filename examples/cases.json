@@ -123,9 +123,9 @@
     {
       "id": "js-rendered", "group": "matching",
       "title": "Text added by JavaScript after load",
-      "why": "The page fetches its content 1.2 s after loading. The script waits for the network to go quiet and retries.",
+      "why": "The page fetches its content 1.2 s after loading. The script waits for the network to go quiet and retries, so the quote is verified. Browsers apply a highlight link once, at load, so the link can't highlight text that arrives later; the result's note says so.",
       "cite": { "url": "{{base}}/js-rendered.html", "quote": "All systems are operating normally." },
-      "expect": { "ok": true, "match": "exact" }
+      "expect": { "ok": true, "match": "exact", "note": "appeared only after the page finished loading", "link": false }
     },
     {
       "id": "non-latin", "group": "matching",

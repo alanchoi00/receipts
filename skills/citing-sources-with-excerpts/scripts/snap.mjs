@@ -86,13 +86,15 @@ const encFrag = (s) => encodeURIComponent(s).replace(/-/g, '%2D').replace(/,/g, 
 
 // Long quotes, or quotes whose DOM text differs from the clean text (e.g. a [12] footnote marker
 // inside), use the textStart,textEnd form. prefix/suffix pin the right occurrence of repeated text.
-function buildFragmentUrl(base, text, { forceRange = false, prefix = null, suffix = null, lines = null } = {}) {
+function buildFragmentUrl(base, text, { forceRange = false, prefix = null, suffix = null, lines = null, markerTerms = null } = {}) {
   const words = text.trim().split(/\s+/);
   let body;
   if (lines && lines.length > 1) {
     // Spans several lines: start = opening words of the first line, end = closing words of the last.
     const first = lines[0].split(' '), last = lines.at(-1).split(' ');
     body = `${encFrag(first.slice(0, 5).join(' '))},${encFrag(last.slice(-5).join(' '))}`;
+  } else if (markerTerms) {
+    body = `${encFrag(markerTerms[0])},${encFrag(markerTerms[1])}`;
   } else if ((text.length > 160 && words.length > 12) || (forceRange && words.length >= 4)) {
     const n = Math.min(5, Math.floor(words.length / 2));
     body = `${encFrag(words.slice(0, n).join(' '))},${encFrag(words.slice(-n).join(' '))}`;
@@ -347,6 +349,13 @@ function locateInPage({ start, end, prefix, suffix, includeHidden, allowFuzzy, h
   // A text-fragment term can't cross a line/block boundary, so a match that spans lines is linked
   // with start,end terms taken from its first and last line.
   const lines = raw.slice(hit.rawStart, hit.rawEnd).split('\u2029').map(flatWs).filter(Boolean);
+  // Footnote markers ([1]) inside the quote are on the page but not in the quote: link with a start
+  // term before the first marker and an end term after the last, so neither straddles one.
+  let markerTerms = null;
+  if (domDiffers) {
+    const parts = flatWs(range.toString()).split(/\s*\[[^\]]{1,8}\]\s*/).map(flatWs).filter(Boolean);
+    if (parts.length > 1) markerTerms = [parts[0].split(' ').slice(0, 5).join(' '), parts.at(-1).split(' ').slice(-5).join(' ')];
+  }
   const lastWords = (s, n) => s.split('\u2029').pop().trim().split(/\s+/).filter(Boolean).slice(-n).join(' ');
   const firstWords = (s, n) => s.split('\u2029')[0].trim().split(/\s+/).filter(Boolean).slice(0, n).join(' ');
 
@@ -376,6 +385,7 @@ function locateInPage({ start, end, prefix, suffix, includeHidden, allowFuzzy, h
     quoteOnPage,
     domDiffers,
     lines,
+    markerTerms,
     before: lastWords(raw.slice(Math.max(0, hit.rawStart - 120), hit.rawStart), 3),
     after: firstWords(raw.slice(hit.rawEnd, hit.rawEnd + 120), 3),
     excerpt,
@@ -634,8 +644,10 @@ async function snapGroup(browser, base, items, timeout) {
       };
       let [found, used] = await locate();
       // Client-rendered pages may not have the text yet: wait for the network once, then retry.
+      let late = false;
       if ((found.match === 'none' || found.match === 'fuzzy') && !waited) {
         waited = true;
+        late = true;
         await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
         await page.waitForTimeout(500);
         [found, used] = await locate();
@@ -653,12 +665,14 @@ async function snapGroup(browser, base, items, timeout) {
       result.fragment_url = buildFragmentUrl(base, found.quoteOnPage, {
         forceRange: found.domDiffers,
         lines: found.lines,
+        markerTerms: found.markerTerms,
         prefix: pin ? found.before || null : null,
         suffix: pin ? found.after || null : null,
       });
       // Skip a section that just repeats the page title (e.g. MDN's h1).
       if (found.section && !result.title.toLowerCase().includes(found.section.toLowerCase())) result.section = found.section;
       result.excerpt = found.excerpt;
+      if (late && (found.match === 'exact' || found.match === 'loose')) notes.push('This text appeared only after the page finished loading (added by JavaScript). It is verified, but browsers may not highlight it when the link is opened.');
       if (found.match === 'fuzzy') notes.push(`Quote not on page verbatim; closest sentence (overlap ${found.score.toFixed(2)}). Use quote_on_page, not the original quote.`);
       if (found.occurrences > 1) {
         result.occurrences = found.occurrences;

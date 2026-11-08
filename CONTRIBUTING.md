@@ -31,7 +31,7 @@ claude --plugin-dir .
 
 ## Test your change
 
-Every change to the script must keep all example cases passing:
+Every change to the script must keep all example cases passing, including the browser check that each generated link really highlights its quote:
 
 ```bash
 node examples/build.mjs --check      # verify everything, write nothing
@@ -63,6 +63,8 @@ Fixing a bug or adding a feature? Add a case that would have failed before, so i
    ```
 
    `{{base}}` is the local fixture server. Add `"live": true` for cases that use real websites. `expect` can check `ok`, `match`, `hidden`, `internal`, `occurrence`, `occurrences`, `screenshot`, and substrings of `error`, `note` and the link (`fragment`).
+
+   Every generated link is also opened in Chromium to confirm it really jumps to the quote. If a link legitimately can't highlight (for example, text a page adds with JavaScript after loading), set `"link": false` in `expect` and say why in `why`.
 3. Run `node examples/build.mjs` and check the new screenshot by eye.
 
 ## Change the skill instructions
