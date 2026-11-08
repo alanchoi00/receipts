@@ -297,7 +297,8 @@ function locateInPage({ start, end, prefix, suffix, includeHidden, allowFuzzy, h
   const block = startEl.closest('p,li,blockquote,dd,dt,td,th,pre,figcaption,h1,h2,h3,h4,h5,h6') || blockOf(startEl);
   // Table cells: frame the whole row so the value keeps its row context.
   const frameEl = block.matches('td,th') ? block.closest('tr') || block : block;
-  if (!hidden) frameEl.scrollIntoView({ block: 'center' });
+  // 'instant': pages with scroll-behavior: smooth otherwise animate, and we'd measure mid-scroll.
+  if (!hidden) frameEl.scrollIntoView({ block: 'center', behavior: 'instant' });
   // Measure the block's text, not its box: floats (infoboxes) can overlap a paragraph's box.
   const textRange = document.createRange();
   textRange.selectNodeContents(frameEl);
@@ -597,7 +598,7 @@ async function screenshotStable(page, out, shot, relocate) {
     // (~20k px on Wikipedia), which triggers lazy loading and intermittently stalls rendering.
     // Center the clip so sticky headers don't cover it.
     const c = clipFor(m, shot, vw, vh);
-    const [sx, sy] = await page.evaluate(([x, y]) => { window.scrollTo(Math.max(0, x), Math.max(0, y)); return [window.scrollX, window.scrollY]; },
+    const [sx, sy] = await page.evaluate(([x, y]) => { window.scrollTo({ left: Math.max(0, x), top: Math.max(0, y), behavior: 'instant' }); return [window.scrollX, window.scrollY]; },
       [c.x - (vw - c.width) / 2, c.y - (vh - c.height) / 2]);
     // A full-width clip (wide tables) always spans the whole viewport, so a pinned first column
     // at the viewport's left edge is fully inside it even when scrolling stopped short.
@@ -607,7 +608,11 @@ async function screenshotStable(page, out, shot, relocate) {
     // Never save a sliver: a crop smaller than one short line of text means the geometry is wrong.
     if (x1 - x0 < 40 || y1 - y0 < 12) continue;
     const before = await page.evaluate(measure); // scrolling can shift lazy content; re-check below
-    await captureExclusive(page, { path: out, clip: { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } });
+    const png = await captureExclusive(page, { path: out, clip: { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } });
+    // A blank capture (an overlay, a fade-in, a mid-scroll frame) compresses to almost nothing:
+    // real crops are >= ~0.035 bytes/pixel, a uniform one ~0.005. Wait a moment and retake.
+    const scale = shot.scale || 1;
+    if (png.length / ((x1 - x0) * (y1 - y0) * scale * scale) < 0.01) { await page.waitForTimeout(500); continue; }
     if (same(before, await page.evaluate(measure))) return true;
   }
   rmSync(out, { force: true });
@@ -771,7 +776,7 @@ async function snapGroup(browser, base, items, timeout) {
         const relocate = () => page.evaluate(locateInPage, { ...base_, ...used });
         await relocate();
         if (await screenshotStable(page, it.out, it.shot, relocate)) result.screenshot = it.out;
-        else notes.push('No screenshot: the page kept rebuilding or moving this passage, so no reliable crop was possible. The quote itself is verified.');
+        else notes.push('No screenshot: no clean capture was possible (the passage kept moving, or the capture came out blank). The quote itself is verified.');
       }
       if (notes.length) result.note = notes.join(' ');
       it.result = result;

@@ -10,7 +10,7 @@ node examples/build.mjs --check    # smoke test: verify only, write nothing
 node examples/build.mjs --offline  # skip the 🌐 cases
 ```
 
-Last run: 2026-11-08 · 57/57 cases pass.
+Last run: 2026-11-08 · 59/59 cases pass.
 
 ## Finding the quote
 
@@ -1060,6 +1060,8 @@ What the skill writes:
 | [frame: viewport on a very short page](#viewport-short-page) |  | ✅ |
 | [theme: dark on a site without dark mode](#dark-unsupported) |  | ✅ |
 | [Page rebuilds the passage after loading](#rebuilt-dom) |  | ✅ |
+| [Page with smooth scrolling](#smooth-scroll) |  | ✅ |
+| [🌐 Smooth scrolling on a heavy news page](#smooth-scroll-live) |  | ✅ |
 | [Quote in a wide table](#wide-table) |  | ✅ |
 | [🌐 Page that keeps shifting while loading](#tall-block-shift) |  | ✅ |
 
@@ -1570,6 +1572,69 @@ What the skill writes:
 ```
 
 <img src="refs/rebuilt-dom.png" alt="Page rebuilds the passage after loading" width="720">
+
+<a id="smooth-scroll"></a>
+### Page with smooth scrolling
+
+Many news sites set scroll-behavior: smooth, so scrolling animates instead of jumping. Positioning the crop (here: just the quote's lines, at the end of a long paragraph) used to read the scroll position before the animation finished, so it cropped the wrong part of the page and came out blank. Scrolling is now instant, and blank captures are retaken.
+
+<details><summary>Input</summary>
+
+```json
+{
+  "url": "http://127.0.0.1:4317/smooth.html",
+  "quote": "Chip stocks fell sharply after the earnings call",
+  "out": "refs/smooth-scroll.png",
+  "frame": "quote"
+}
+```
+
+</details>
+
+**match:** `exact` · **internal:** true · **link:** highlights the quote in Chromium
+
+What the skill writes:
+
+```md
+[^smooth-scroll]: > Chip stocks fell sharply after the earnings call
+    >
+    > — [Long read](http://127.0.0.1:4317/smooth.html#:~:text=Chip%20stocks%20fell%20sharply%20after%20the%20earnings%20call) · retrieved 2026-11-08
+    >
+    > ![Page with smooth scrolling](refs/smooth-scroll.png)
+```
+
+<img src="refs/smooth-scroll.png" alt="Page with smooth scrolling" width="720">
+
+<a id="smooth-scroll-live"></a>
+### 🌐 Smooth scrolling on a heavy news page
+
+The Week sets scroll-behavior: smooth and is heavy enough that the scroll animation is still running when the crop is taken. This screenshot used to come out blank. (The local smooth-scroll page above is too light to reproduce it.)
+
+<details><summary>Input</summary>
+
+```json
+{
+  "url": "https://theweek.com/business/markets/why-chinas-ai-bubble-is-bursting",
+  "quote": "vaporizing some $480 billion in market value",
+  "out": "refs/smooth-scroll-live.png"
+}
+```
+
+</details>
+
+**match:** `exact` · **link:** highlights the quote in Chromium
+
+What the skill writes:
+
+```md
+[^smooth-scroll-live]: > vaporizing some $480 billion in market value
+    >
+    > — [Why China’s AI bubble is bursting | The Week US — Why is China’s AI economy unique?](https://theweek.com/business/markets/why-chinas-ai-bubble-is-bursting#:~:text=vaporizing%20some%20%24480%20billion%20in%20market%20value) · retrieved 2026-11-08
+    >
+    > ![Smooth scrolling on a heavy news page](refs/smooth-scroll-live.png)
+```
+
+<img src="refs/smooth-scroll-live.png" alt="Smooth scrolling on a heavy news page" width="720">
 
 <a id="wide-table"></a>
 ### Quote in a wide table

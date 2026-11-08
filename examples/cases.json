@@ -417,6 +417,23 @@
       "expect": { "ok": true, "match": "exact", "screenshot": true }
     },
     {
+      "id": "smooth-scroll",
+      "group": "screenshots",
+      "title": "Page with smooth scrolling",
+      "why": "Many news sites set scroll-behavior: smooth, so scrolling animates instead of jumping. Positioning the crop (here: just the quote's lines, at the end of a long paragraph) used to read the scroll position before the animation finished, so it cropped the wrong part of the page and came out blank. Scrolling is now instant, and blank captures are retaken.",
+      "cite": { "url": "{{base}}/smooth.html", "quote": "Chip stocks fell sharply after the earnings call", "out": true, "frame": "quote" },
+      "expect": { "ok": true, "match": "exact", "screenshot": true }
+    },
+    {
+      "id": "smooth-scroll-live",
+      "group": "screenshots",
+      "live": true,
+      "title": "Smooth scrolling on a heavy news page",
+      "why": "The Week sets scroll-behavior: smooth and is heavy enough that the scroll animation is still running when the crop is taken. This screenshot used to come out blank. (The local smooth-scroll page above is too light to reproduce it.)",
+      "cite": { "url": "https://theweek.com/business/markets/why-chinas-ai-bubble-is-bursting", "quote": "vaporizing some $480 billion in market value", "out": true },
+      "expect": { "ok": true, "match": "exact", "screenshot": true }
+    },
+    {
       "id": "wide-table", "group": "screenshots",
       "title": "Quote in a wide table",
       "why": "Frames the whole row so the value keeps its context. The table is wider than the window, so the crop centers horizontally on the quote.",

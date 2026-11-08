@@ -78,6 +78,8 @@ function verify(result, expect) {
         const png = readFileSync(result.screenshot);
         const w = png.readUInt32BE(16), h = png.readUInt32BE(20);
         if (w < 80 || h < 24) fails.push(`screenshot is a ${w}x${h} sliver, not a usable crop`);
+        // A blank (uniform) image compresses to almost nothing; real crops are >= ~0.035 bytes/pixel.
+        else if (png.length / (w * h) < 0.01) fails.push(`screenshot looks blank (${(png.length / (w * h)).toFixed(4)} bytes/pixel)`);
       }
     } else if ((result[k] ?? (k === 'hidden' || k === 'internal' ? false : null)) !== v) {
       fails.push(`${k} should be ${JSON.stringify(v)} (got ${JSON.stringify(result[k] ?? null)})`);
@@ -218,6 +220,26 @@ const linkResults = new Map();
     const queue = [...toCheck];
     const worker = async () => { for (let item; (item = queue.shift()); ) linkResults.set(item[0].id, await linkMatches(browser, item[1].fragment_url)); };
     await Promise.all(Array.from({ length: 4 }, worker));
+    // Every screenshot must actually show the highlighted quote: count pixels in the highlight colour.
+    // Catches blank captures and crops of the wrong part of the page alike.
+    const shotPage = await browser.newPage();
+    for (const [i, c] of cases.entries()) {
+      const r = results[i];
+      if (!r?.screenshot || c.cite.highlight === 'none') continue;
+      const hex = (c.cite.highlight && /^#[0-9a-f]{6}$/i.test(c.cite.highlight) ? c.cite.highlight : '#f8d9b8').slice(1);
+      const rgb = [0, 2, 4].map((k) => parseInt(hex.slice(k, k + 2), 16));
+      const dataUrl = 'data:image/png;base64,' + readFileSync(r.screenshot).toString('base64');
+      r.highlightShare = await shotPage.evaluate(async ([src, rgb]) => {
+        const img = new Image(); img.src = src; await img.decode();
+        const cv = document.createElement('canvas'); cv.width = img.width; cv.height = img.height;
+        const ctx = cv.getContext('2d'); ctx.drawImage(img, 0, 0);
+        const d = ctx.getImageData(0, 0, cv.width, cv.height).data;
+        let hit = 0;
+        for (let k = 0; k < d.length; k += 4) if (Math.abs(d[k] - rgb[0]) + Math.abs(d[k + 1] - rgb[1]) + Math.abs(d[k + 2] - rgb[2]) < 24) hit++;
+        return hit / (d.length / 4);
+      }, [dataUrl, rgb]);
+    }
+    await shotPage.close();
     // Every sentence "find" returns must have a working link too.
     const mq = [...matchChecks];
     const mworker = async () => { for (let item; (item = mq.shift()); ) item[1].link = await linkMatches(browser, item[1].fragment_url); };
@@ -232,6 +254,8 @@ const rows = cases.map((c, i) => {
   const link = linkResults.get(c.id);
   const shown = results[i]?.fragment_url?.replaceAll(BASE, 'http://127.0.0.1:4317');
   for (const m of results[i]?.matches || []) if (m.link === false) fails.push(`a "find" match link doesn't highlight in Chromium: ${m.fragment_url.replaceAll(BASE, 'http://127.0.0.1:4317')}`);
+  const share = results[i]?.highlightShare;
+  if (share !== undefined && share < 0.002) fails.push(`screenshot doesn't show the highlighted quote (${(share * 100).toFixed(2)}% highlight-coloured pixels)`);
   if (c.expect.link === false) { if (link === true) fails.push(`expected the link not to highlight, but it did: ${shown}`); }
   else if (link === false) fails.push(`fragment_url doesn't highlight the quote in Chromium: ${shown}`);
   return { c, r: { ...results[i], link }, fails };
